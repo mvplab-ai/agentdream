@@ -47,7 +47,7 @@ Issues = "https://github.com/systemagents-ai/agentdream/issues"
 packages = ["src/agentdream"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/agentdream", "tests", "examples", "README.md", "LICENSE", "CONTRIBUTING.md", "SPEC.md"]
+include = ["src/agentdream", "tests", "examples", "docs", "README.md", "LICENSE", "CONTRIBUTING.md", "SPEC.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

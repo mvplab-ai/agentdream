@@ -18,29 +18,45 @@ Thanks for helping! agentdream aims to stay small, dependable and dependency-fre
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e . pytest
-.venv/bin/python -m pytest -q
+.venv/bin/pip install -e ".[dev]"                 # pytest, pytest-cov, ruff, mypy
+.venv/bin/pip install -e ".[stancelog]"           # optional: run the stancelog adapter tests too
+.venv/bin/python -m pytest -q                      # ~10 s
+.venv/bin/python -m pytest -q --cov=agentdream --cov-report=term-missing   # CI enforces fail_under
+.venv/bin/ruff check src tests examples
+.venv/bin/mypy                                     # config in pyproject.toml
 ```
+
+Docs are tested too: `tests/test_docs.py` runs every Python block marked `<!-- test: run -->` in the
+README and `docs/`, parses every `agentdream ...` command line against the real CLI, and lints the Mermaid
+diagrams. Regenerate the README's before/after sample with `python examples/run_example.py` if you change
+the heuristics.
 
 The live smoke test (`tests/test_live.py`) runs only with `AGENTDREAM_LIVE=1` and a logged-in `claude` CLI.
 
 ## Layout
 
 ```
+See the module map in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#module-map). In short:
+
+```
 src/agentdream/
   models.py          MemoryEntry, Message, Transcript, Evidence, Operation, apply_operations
-  text.py            normalisation, stemming, claim extraction, value slots
+  text.py            normalisation, stemming, claim extraction, value slots (memoised)
+  blocking.py        exact candidate generation (prefix filtering, inverted indexes)
+  chunking.py        token-budgeted chunks for LLM map-reduce
   adapters/          markdown, json/jsonl, sqlite, stancelog (lazy) + registry
   loaders.py         transcript formats + auto-detection
-  redact.py          secret redaction
+  redact.py          secret redaction (patterns + entropy)
   context.py         DreamConfig, DreamContext
-  engine/            deterministic heuristics, LLM prompts/validation/fallback
+  engine/            deterministic heuristics; LLM prompts, planning, validation, reduce, fallback
   backends/          deterministic, anthropic, openai(-compatible), claude-cli + registry
   pipeline.py        phases (load, redact, limits, consolidate, verify, insights, write)
   report.py          report.md / report.json / diff
   jobs.py            DreamJob (status, persistence, cancel)
   review.py          accept (partial), discard
   scheduler.py       idle / interval / every-N-sessions triggers
+  claude_hook.py     Claude Code hook + settings.json installer
+  config.py          config files, env vars, precedence (_toml.py: TOML loading)
   mcp_server.py      stdio MCP server
   cli.py             `agentdream` command
 ```
@@ -57,6 +73,7 @@ src/agentdream/
 
 ## Pull requests
 
-- Keep PRs focused; include tests; run `python -m pytest -q` locally (CI runs Python 3.10–3.13).
+- Keep PRs focused; include tests; run `python -m pytest -q`, `ruff check` and `mypy` locally (CI runs
+  Python 3.10–3.13 on Linux plus macOS, and the lint job).
 - Describe behaviour changes in the README if they are user-visible.
 - Be kind in reviews.

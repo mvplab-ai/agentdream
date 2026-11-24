@@ -1,117 +1,119 @@
 # agentdream
 
-**Local-first "dreaming" (sleep-time memory consolidation) for any agent and any model.**
+[![CI](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml/badge.svg)](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10 | 3.11 | 3.12 | 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 
-An agent's memory drifts: duplicates pile up, old values go stale, preferences get reversed, and
-sometimes a note is just *wrong*, and the agent keeps acting on it. A **dream** is an offline job that
-reads the memory store plus recent session transcripts and writes a **new, reorganized store** for you to
-review:
+**Sleep-time memory consolidation ("dreaming") for any agent and any model — local-first, reviewable, zero dependencies.**
 
-- **Merged:** duplicate and near-duplicate notes collapsed into one
-- **Replaced (stale):** older values superseded by newer ones
-- **Corrected:** notes that transcripts prove wrong get fixed, **with `file:line` citations and quotes**
-- **New insights:** recurring mistakes, repeated preferences, converged workflows
-- **Contradictions:** including *temporal* ones ("don't use A" → later "use A"); the latest wins and the history is kept
-- **Unchanged** count, plus a unified **diff** of old vs new store
+Agents accumulate memory notes that drift: duplicates pile up, old values go stale, and some notes are
+simply wrong — the agent keeps acting on them and failing. `agentdream` reads your agent's memory store
+plus recent session transcripts and produces a **new, reorganized store** and a report: duplicates merged,
+stale values replaced, notes corrected *with citations to the transcript lines that prove it*, and new
+insights (recurring mistakes, repeated preferences, converged workflows). Your input store is never
+modified; you review the diff and accept all, some, or none of it.
 
-The input store is **never modified**. Dreams are dry runs by default; you `accept` (all or some
-operations, with an automatic backup) or `discard`.
+It is an open-source take on the idea behind Anthropic's
+[Dreams](https://platform.claude.com/docs/en/managed-agents/dreams) for Claude Managed Agents and the
+Letta / UC Berkeley [sleep-time compute](https://arxiv.org/abs/2504.13171) paper — but it runs on your
+machine, works with markdown folders (Claude Code's `CLAUDE.md` / memory dirs), JSON, SQLite and
+[stancelog](https://github.com/systemagents-ai/stancelog) stores, and with no model at all
+(deterministic heuristics), a local model (Ollama, LM Studio, vLLM), the Anthropic or OpenAI APIs, or
+your Claude Code login.
 
-```
-pip install agentdream          # zero runtime dependencies (stdlib only)
-agentdream dream --memory ./memory --sessions ./logs
-agentdream show <job-id>
-agentdream accept <job-id> --only correct-2ec6281c,merge-a91fbf3a
-```
-
-## Credit and how this differs
-
-The idea comes from two sources:
-
-- **Anthropic's "Dreams"** for Claude Managed Agents (research preview): an async job that takes a memory
-  store and up to 100 session transcripts and produces a reorganized store (duplicates merged, stale
-  entries replaced, notes verified against what actually happened, new insights surfaced). Anthropic's
-  example is *Claude Plays Pokémon*: a wrong note about where the PokéCenter was got corrected from the
-  logs, which got the agent out of a loop.
-  See [the Dreams docs](https://platform.claude.com/docs/en/managed-agents/dreams),
-  [the launch post](https://claude.com/resources/articles/new-in-claude-managed-agents) and
-  ["The components of agent memory"](https://www.anthropic.com/research/components-of-agent-memory).
-- **Sleep-time compute** (Letta / UC Berkeley): *"Sleep-time Compute: Beyond Inference Scaling at Test-time"*,
-  [arXiv:2504.13171](https://arxiv.org/abs/2504.13171). Use idle time to pre-process context so test-time
-  inference is cheaper and better.
-
-agentdream is an **independent, original, open-source implementation** of the idea (MIT). It does not use
-Anthropic's code. The differences:
-
-| | agentdream |
-|---|---|
-| Agents | any agent: Claude Code, Cursor, custom agents, game bots, plain chat logs |
-| Models | any model, including local ones (Ollama, LM Studio, vLLM), the Anthropic API, OpenAI, your Claude Code login, **or no model at all** (deterministic heuristics) |
-| Where | runs locally; your memory and transcripts stay on your machine unless you pick a hosted backend |
-| Lock-in | none: Markdown folders, JSON/JSONL, SQLite, pluggable adapters |
-
-## Quickstart
-
-```python
-from agentdream import dream
-
-job = dream(memory="./mem", sessions=["./logs"], backend="deterministic")
-print(job.status)                 # completed
-print(job.report["counts"])       # {'merged': 1, 'replaced': 1, 'corrected': 1, ...}
-print(job.report_md)              # human-readable report
-print(job.store_path)             # the NEW store (staged)
-
-from agentdream import accept, discard
-accept(job, only=["correct-2ec6281c"])   # partial accept; dependencies are pulled in automatically
-```
-
-Async, with status that survives restarts (`.agentdream/jobs/<id>/job.json`, or `$AGENTDREAM_HOME/jobs`):
-
-```python
-from agentdream import dream, DreamJob
-
-job = dream("./mem", ["./logs"], wait=False)    # pending -> running -> completed | failed | canceled
-job.status, job.phase, job.progress
-job.cancel()
-DreamJob.load(job.id).status                    # from any process
-```
-
-Try it on the bundled example, which reproduces the Pokémon case and the "A rejected, then A preferred" case:
+## 60-second quickstart
 
 ```bash
-python examples/run_example.py
+pip install "git+https://github.com/systemagents-ai/agentdream"     # not on PyPI yet; Python >= 3.10
+git clone https://github.com/systemagents-ai/agentdream && cd agentdream   # for the example data
+
+agentdream dream --memory examples/memory --sessions examples/sessions     # dry run: nothing is changed
+agentdream show <job-id>                 # the report: what changed, why, with transcript citations
+agentdream accept <job-id>               # apply it (the original is backed up first)
+agentdream accept <job-id> --only correct-2ec6281c,merge-a91fbf3a     # ...or just some operations
+agentdream discard <job-id>              # ...or throw it away
 ```
 
-### CLI
+Point it at your own agent: `--memory` takes a markdown folder or file, a JSON/JSONL file or folder, a
+SQLite database or `stancelog:<path>`; `--sessions` takes transcript files, folders or globs (generic
+`{"role", "content"}` JSONL, Claude Code session files, OpenAI-style message JSON, or plain
+`User: / Assistant:` text — auto-detected).
+
+## How it works
+
+A dream is a pipeline of small, replaceable phases:
 
 ```
-agentdream dream   --memory PATH --sessions FILES/DIRS/GLOBS [--backend deterministic|anthropic|openai|ollama|claude-cli]
-                   [--model M] [--base-url URL] [--instructions "focus on ..."] [--out DIR] [--apply]
-                   [--max-sessions 100] [--max-bytes-per-transcript N] [--max-total-tokens N] [--on-limit truncate|fail]
-                   [--no-redact] [--redact-emails]
-agentdream status  [JOB] [--json]
-agentdream list
-agentdream show    JOB [--json | --diff]
-agentdream accept  JOB [--only op1,op3 | --exclude op2] [--to DIR] [--no-backup] [--force]
-agentdream discard JOB
-agentdream cancel  JOB
-agentdream schedule --memory ... --sessions ... (--every 6h | --idle 30m | --new-sessions 5) [--once] [--apply]
-agentdream serve-mcp
+load (read-only) → redact secrets → enforce size limits → consolidate → verify → insights → write new store + report
 ```
 
-`dream` is a **dry run**: it writes `<out>/store/` (the new store), `<out>/report.md` and
-`<out>/report.json`, and applies nothing. `--apply` accepts everything afterwards (the backup is still made).
+* **consolidate** merges duplicates / near-duplicates, replaces stale values with the latest one, and
+  resolves stance reversals ("don't use A" … later "use A") keeping a one-line history;
+* **verify** checks each note against what actually happened in the transcripts and corrects notes the
+  evidence contradicts, citing `file:line` and quoting the lines;
+* **insights** surfaces patterns that recur across sessions.
 
-## Example report (generated from `examples/`)
+Each change is an **operation** with a stable id, so you can accept them selectively. With an LLM backend
+each phase is a structured-JSON prompt whose output is validated (unknown ids and unverifiable citations
+are dropped); large inputs are split into token-budgeted chunks and the per-chunk results are merged
+deterministically. If the model fails, the deterministic heuristics take over.
+Details, diagrams and extension points: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-Excerpt of `python examples/run_example.py` (deterministic backend, no model):
+## A real run on `examples/`
 
+Generated by `python examples/run_example.py` with the deterministic backend (no model, no network).
+
+**Before** — `examples/memory/MEMORY.md`:
+
+```markdown
+## Navigation (Viridian City)
+
+- The PokéCenter in Viridian City is north of the gym. (2026-01-03)
+- The Poké Mart in Viridian City sells Potions and Poké Balls.
+
+## Tooling
+
+- Don't use Poetry for dependency management — it was too slow on CI. (2026-01-05)
+- Run the test suite with `pytest -q` before committing.
+- Run the tests with `pytest -q` before every commit.
+
+## Project facts
+
+- The API server listens on port 8080. (2025-12-01)
+- Production deploys go through the `release` branch.
+```
+
+(`notes/project.md` also says *"The API server listens on port 9090. (2026-02-10)"*; the five sessions
+show the agent walking north of the gym and failing, then finding the PokéCenter south of it, and the
+user switching to Poetry.)
+
+**After** — the staged store (nothing applied until you accept):
+
+```markdown
+## Navigation (Viridian City)
+
+- The PokéCenter in Viridian City is south of the gym. (2026-03-03)
+- The Poké Mart in Viridian City sells Potions and Poké Balls.
+
+## Tooling
+
+- Use Poetry for dependency management. (History: earlier said "Don't use Poetry for dependency management — it was too slow on CI" (2026-01-05); reversed later (examples/sessions/session-04-claude-code.jsonl:2).)
+- Run the tests with `pytest -q` before every commit.
+
+## Project facts
+
+- Production deploys go through the `release` branch.
+```
+
+plus a new `dream-insights.md` with *"Preference (stated in 2 sessions): Always use type hints in Python
+code."*, a recurring-mistake note and a converged `pytest -q` → `git commit -m` workflow.
+
+**Report excerpt** (`report.md`):
+
+```markdown
 | Merged | Replaced | Corrected | New insights | Contradictions (temporal) | Unchanged |
 |---|---|---|---|---|---|
 | 1 | 1 | 1 | 3 | 2 (2) | 3 |
-
-```markdown
-## Corrected (1)
 
 ### `correct-2ec6281c` — Corrected from transcript evidence: "The PokéCenter in Viridian City is south of the gym. (2026-03-03)"
 
@@ -121,178 +123,246 @@ Excerpt of `python examples/run_example.py` (deterministic backend, no model):
 - Why: Transcripts show 'south', not 'north' (3 supporting, 4 refuting observation(s)).
 - Evidence:
   - `examples/sessions/session-01.jsonl:3` (refutes, assistant): "Walked north of the gym for 20 steps. No PokéCenter here, only tall grass."
+  - `examples/sessions/session-01.jsonl:4` (refutes, assistant): "Still can't find the PokéCenter north of the gym."
   - `examples/sessions/session-02.jsonl:2` (refutes, assistant): "Walked north of the gym again. No PokéCenter here, this is a dead end."
+  - `examples/sessions/session-02.jsonl:3` (refutes, assistant): "Still can't find the PokéCenter north of the gym."
   - `examples/sessions/session-03.jsonl:2` (supports, assistant): "It is just south of the gym, next to the Poké Mart."
   - `examples/sessions/session-03.jsonl:3` (supports, assistant): "Healed the whole team at the PokéCenter south of the gym."
+- Confidence: 0.80 · origin: deterministic
 
-## Contradictions (2)
+### `replace-ef9c48dc` — Stale value replaced by the latest: "The API server listens on port 9090. (2026-02-10)"
 
-### `contradiction-c4b66adf` [temporal] — Preference reversed in later sessions: now "Use Poetry for dependency management."
-
-- Before: Don't use Poetry for dependency management — it was too slow on CI. (2026-01-05)
-- After: Use Poetry for dependency management. (History: earlier said "Don't use Poetry for dependency
-  management — it was too slow on CI" (2026-01-05); reversed later (examples/sessions/session-04-claude-code.jsonl:2).)
-
-## New insights (3)
-
-- Preference (stated in 2 sessions): Always use type hints in Python code.
-- Recurring mistake (3 occurrences across 2 sessions): "Still can't find the PokéCenter north of the gym" — check before repeating.
-- Converged workflow (used in 2 sessions): `pytest -q` → `git commit -m`.
+- Entries: `MEMORY.md#6`, `notes/project.md#1`
+- Before: The API server listens on port 8080. (2025-12-01)
+- After: The API server listens on port 9090. (2026-02-10)
+- Why: Notes give different values for the same subject; the most recent (by timestamp) wins.
 ```
 
-```diff
--- The PokéCenter in Viridian City is north of the gym. (2026-01-03)
-+- The PokéCenter in Viridian City is south of the gym. (2026-03-03)
--- Don't use Poetry for dependency management — it was too slow on CI. (2026-01-05)
--- Run the test suite with `pytest -q` before committing.
-+- Use Poetry for dependency management. (History: ...)
- - Run the tests with `pytest -q` before every commit.
--- The API server listens on port 8080. (2025-12-01)
+The report also contains a unified diff of old vs. new store, and `report.json` has the same data for
+machines. Operation ids are content hashes, so they are stable across re-runs of the same inputs.
+
+## Configuration
+
+Every option can come from a CLI flag, an `AGENTDREAM_*` environment variable, a project config file
+(`.agentdream.toml`, or `[tool.agentdream]` in `pyproject.toml`, found by walking up from the current
+directory) or a user config file (`~/.config/agentdream/config.toml`). Precedence:
+**CLI > env > project file > user file > defaults**. `agentdream config` prints every effective value and
+where it came from.
+
+```toml
+# .agentdream.toml — relative paths are relative to this file
+backend = "ollama"
+model = "llama3.1:8b"
+memory = "memory"
+sessions = ["~/.claude/projects/-home-me-myrepo/*.jsonl"]
+
+[limits]
+max_sessions = 20
+max_chunk_tokens = 8000        # small local context window -> more, smaller chunks
+
+[redaction]
+emails = true
+
+[hook]
+every = 3                      # Claude Code hook: dream every 3 sessions
 ```
 
-## Integrations
+With that file, `agentdream dream` needs no flags at all; `AGENTDREAM_MODEL=qwen2.5:14b agentdream dream`
+overrides one value. All keys, env vars and defaults: **[docs/CONFIG.md](docs/CONFIG.md)**.
 
-### Claude Code
+## Backends
+
+| Backend | `--backend` | Needs | Notes |
+|---|---|---|---|
+| Deterministic heuristics | `deterministic` (default) | nothing | Offline, free, reproducible. Rule-based duplicate / contradiction / evidence matching. Handles 5k-entry stores in seconds. |
+| Anthropic Messages API | `anthropic` | `ANTHROPIC_API_KEY` | Default model `claude-sonnet-5-5`; `--model` to change. stdlib HTTP, no SDK. |
+| OpenAI-compatible | `openai`, `ollama`, `lmstudio`, `vllm` | `OPENAI_API_KEY` for api.openai.com; nothing for local servers | `--base-url` for any compatible server. `ollama` → `http://localhost:11434/v1`, `lmstudio` → `:1234`. |
+| Claude Code CLI | `claude-cli` | `claude` on PATH, logged in | Runs `claude -p --output-format json` — uses your Claude Code login, no API key. |
 
 ```bash
-claude mcp add agentdream -- agentdream serve-mcp
+agentdream dream -m ./memory -s ./logs --backend anthropic --model claude-sonnet-5-5
+agentdream dream -m ./memory -s ./logs --backend ollama --model llama3.1:8b --max-chunk-tokens 6000
+agentdream dream -m ./memory -s ./logs --backend openai --base-url http://localhost:8000/v1 --model my-vllm-model
+agentdream dream -m ./memory -s ./logs --backend claude-cli
 ```
 
-Then ask Claude to dream over `~/.claude/projects/<project>/memory` with that project's `*.jsonl`
-sessions. Claude Code session files are auto-detected. See
-[`examples/integrations/claude-code.md`](examples/integrations/claude-code.md). To use your Claude Code login as
-the model: `--backend claude-cli` (runs `claude -p --output-format json`, no API key needed).
+Every LLM backend falls back to the heuristics if the model is unreachable or returns unusable output (a
+warning is recorded in the report). Setup details, custom backends: **[docs/BACKENDS.md](docs/BACKENDS.md)**.
 
-### Cursor
+## Claude Code integration
 
-`.cursor/mcp.json` ([example](examples/integrations/cursor-mcp.json)):
+**MCP server** — let Claude run dreams on request:
+
+```bash
+claude mcp add agentdream -- agentdream serve-mcp        # or: -- python -m agentdream serve-mcp
+```
+
+Tools: `dream`, `dream_status`, `show_report`, `accept`, `discard`, `list_dreams`. Ask *"dream over my
+memory using the last sessions and show me the report"*; Claude calls `dream` and `show_report`, and
+`accept` only once you approve.
+
+**Auto-dream after sessions** — an opt-in Claude Code hook:
+
+```bash
+cd ~/code/myrepo
+agentdream install-claude-hook --every 3          # .claude/settings.json; --local or --user for other scopes
+```
+
+After every third session (`SessionEnd`), a background dream runs over those sessions against the
+project's Claude memory (`~/.claude/projects/<project>/memory/`, else `CLAUDE.md`). It is a **dry run**
+unless you pass `--apply`: results land in `.agentdream/jobs/` for `agentdream list` / `show` / `accept`.
+The hook returns in ~0.1 s, never blocks or fails your session, logs to `.agentdream/hook.log`, and a lock
+prevents concurrent dreams. Remove it with `agentdream uninstall-claude-hook`.
+Full setup: **[docs/CLAUDE_CODE.md](docs/CLAUDE_CODE.md)**.
+
+## Cursor integration
+
+Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
 
 ```json
-{ "mcpServers": { "agentdream": { "command": "agentdream", "args": ["serve-mcp"] } } }
+{
+  "mcpServers": {
+    "agentdream": { "command": "agentdream", "args": ["serve-mcp"] }
+  }
+}
 ```
 
-MCP tools: `dream`, `dream_status`, `accept`, `discard`, `list_dreams`, `show_report`. The server is
-stdlib JSON-RPC 2.0 over stdio with no SDK.
+The same six tools become available in Cursor's agent. A copy lives in
+[`examples/integrations/cursor-mcp.json`](examples/integrations/cursor-mcp.json).
 
-### Scheduling
+## Python API
+
+<!-- test: run -->
+```python
+from agentdream import accept, dream
+
+job = dream(memory="examples/memory", sessions=["examples/sessions"])  # dry run, deterministic
+print(job.status, job.counts["corrected"], job.counts["merged"])         # completed 1 1
+for op in job.operations:
+    print(f"{op.id:28} {op.type:13} {op.summary[:60]}")
+
+corrections = [op.id for op in job.operations if op.type == "correct"]
+result = accept(job, only=corrections, to="reviewed-memory")  # write to a new place, not over the input
+print(result.applied_ops, result.target)
+```
+
+Background jobs, status and cancellation (state survives restarts in `.agentdream/jobs/<id>/job.json`):
+
+<!-- test: run -->
+```python
+from agentdream import DreamJob, dream_async
+
+job = dream_async("examples/memory", ["examples/sessions"], instructions="focus on navigation notes")
+job.wait(timeout=60)
+print(job.status, job.progress)                       # completed 1.0
+print(DreamJob.load(job.id).report["counts"]["insights"])
+```
+
+`dream()` accepts every config field as a keyword (`backend=`, `model=`, `max_chunk_tokens=`,
+`redact_emails=`...); pass an `LLMBackend` instance as `backend` to use a custom model client, and
+`pipeline=` to add or replace phases ([extension points](docs/ARCHITECTURE.md#extension-points)).
+
+## Scheduler
 
 ```bash
-agentdream schedule --memory ./mem --sessions "./logs/*.jsonl" --idle 30m        # after 30 min of no new activity
-agentdream schedule --memory ./mem --sessions ./logs --every 6h                  # interval
-agentdream schedule --memory ./mem --sessions ./logs --new-sessions 5 --once     # every 5 new sessions; single check
+agentdream schedule -m ./memory -s "./logs/*.jsonl" --idle 30m          # after 30 min without new transcript activity
+agentdream schedule -m ./memory -s ./logs --every 6h                     # on an interval (when there are new sessions)
+agentdream schedule -m ./memory -s ./logs --new-sessions 5 --once        # check once (cron-friendly) and exit
 ```
 
-The scheduler remembers which sessions it already dreamed over (`.agentdream/scheduler-state.json`)
-and dreams only over new ones. Results are still staged for review unless you pass `--apply`.
+The scheduler remembers which sessions it has already dreamed over (`.agentdream/scheduler-state.json`),
+so restarts don't re-dream old sessions. Defaults can live in a `[schedule]` config table.
 
-## Inputs
+## Safety guarantees
 
-**Memory stores** (auto-detected; force with `--memory-format`):
+* **The input store is never modified by a dream.** Adapters load read-only (SQLite in `mode=ro`,
+  stancelog from a private temp copy), outputs go to a separate staging directory, and adapters refuse to
+  write onto their input path. The test suite hashes every input file before and after, for every adapter.
+* **Dry run by default.** Nothing is applied until `accept` (or an explicit `--apply`); `accept` backs up
+  the target first, refuses if the store changed since the dream (unless `--force`), and swaps the new
+  store in by rename.
+* **Secrets are redacted before analysis** and again over every prompt sent to a model and every report
+  quote: 30+ patterns covering provider keys (Anthropic, OpenAI, GitHub, AWS, Slack, Stripe, Google,
+  Azure, …), JWTs, private keys, `password=`-style assignments, URL credentials and card numbers, plus a
+  check for long high-entropy tokens.
+  Reports list counts per kind, never the secret.
+* **Size limits** (sessions, bytes per transcript, total tokens, chunks per phase) truncate with a notice or
+  fail clearly (`--on-limit fail`).
+* **Model output is untrusted**: operations naming unknown or unseen entry ids are dropped, citations must
+  name a real transcript line (a quote that doesn't match it is replaced by the real text and flagged), and
+  corrections without verifiable evidence are downgraded to flags.
+* **Atomic writes** for job state, reports and stores; job status survives crashes (a job whose worker died
+  is marked failed).
 
-| Store | Granularity |
-|---|---|
-| Markdown / text folder or single file (`MEMORY.md`, `CLAUDE.md`, `notes/*.md`) | A file with front matter (`---` … `---`, like Claude Code memory files) is **one entry**. Otherwise **one entry per top-level bullet / numbered item** (continuation and nested lines included) and one per free paragraph or code block. Headings become the entry `key`. Ids: `path#n` / `path`. Writing re-renders only changed entries, copies untouched files byte for byte, and puts new insights into the matching section or into `dream-insights.md`. |
-| JSON / JSONL (file or folder) | a list, `{"entries"/"memories": [...]}`, a flat `{"key": "value"}` map, or JSONL lines. Text in `content`/`text`/`memory`/`value`/`note`. Unknown fields round-trip. |
-| SQLite | a table (`memories`/`memory`/`entries`/`notes`, or `table=`) with `id` + a text column. The input is opened read-only, and the output is a backup-API copy with the table rewritten, so other tables survive. |
-| stancelog | optional, see below. |
+How each guarantee is enforced and tested: [docs/ARCHITECTURE.md#safety-guarantees](docs/ARCHITECTURE.md#safety-guarantees).
 
-**stancelog** ([systemagents-ai/stancelog](https://github.com/systemagents-ai/stancelog)) is an optional
-extra: `pip install "agentdream[stancelog]"`. Point agentdream at a database with a `stancelog:` prefix:
+## FAQ
 
-```bash
-agentdream dream --memory stancelog:~/.stancelog/memory.db --sessions ./logs
-```
+**How is this different from Anthropic's Dreams?** Dreams is a managed research-preview feature of Claude
+Managed Agents: it runs on Anthropic's platform over memory stores that live there. agentdream is a
+local, open-source tool with the same shape of workflow (memory + transcripts in, a new store + report
+out, review before accepting) for memory that lives on your disk, any agent framework, and any model —
+including none. It is an independent implementation, not affiliated with Anthropic.
 
-- **load** gives one entry per *current* belief (`Memory.all_current()`), keyed by subject. Each entry's
-  text is the belief text, and its metadata holds `stance`, `polarity`, `confidence`, `valid_from`,
-  `recorded_at` and `source`. Superseded or forgotten beliefs on the same subject (`Memory.history()`)
-  go under `metadata.stancelog_history`. stancelog resolves "don't do A" then "maybe A is better" itself,
-  so only the newer stance is dreamed over. When stancelog filed the two stances under different subjects,
-  agentdream's temporal-contradiction pass merges them.
-- **write** creates a **new** stancelog database by calling `Memory.remember()` once per entry, in order.
-  Each call passes the subject, the surviving belief's polarity and `valid_from`, and the metadata. Text the
-  dream rewrote is otherwise re-extracted by stancelog. The output is a single `.db` file (no journal).
-- Opening a stancelog db writes to it (WAL mode, schema, journal reconcile, lock file), so `load` works on
-  a temporary copy and the input database is never touched. `accept` backs up the old db's
-  `.journal.jsonl`, `-wal` and `-shm` sidecars and then removes them. Otherwise stancelog would "recover"
-  the old events into the new db.
+**How does it compare to Mem0 or Letta?** Those are memory *systems*: they decide what to store while the
+agent runs and serve it back (Letta also runs "sleep-time" agents inside its framework). agentdream is a
+batch *maintenance* step for a store you already have — files, a JSON blob, a SQLite table — that turns
+its output into a reviewable diff. They are complementary; an adapter for another store is ~40 lines.
 
-Third-party adapters use `agentdream.register_adapter(name, cls)` or the `agentdream.adapters`
-entry-point group. Backends work the same way: `register_backend` or `agentdream.backends`.
+**Will it modify my memory?** Not unless you accept. `dream` writes a new store into a staging
+directory; `accept` applies it with a backup; `discard` deletes the staged copy.
 
-**Transcripts** (files, directories, globs; 1..100 sessions by default; format auto-detected per file):
-generic JSONL (`{"role","content"}`), Claude Code sessions (`type: user|assistant`, `message.content` str or
-blocks; thinking and successful tool output dropped, tool calls kept as one line, failed tool results kept),
-OpenAI-style messages JSON (list or `{"messages": [...]}`), plain text (`User:` / `Assistant:` turns, or a raw
-log with one message per line). Every message keeps a stable citation, `file:line` (or `file#index`).
+**Does my data leave my machine?** Only if you choose a remote backend (`anthropic`, `openai`, or
+`claude-cli`, which talks to Anthropic through your Claude Code login), and then only redacted text. The
+default deterministic backend and local OpenAI-compatible servers make no network calls.
 
-## Design notes
+**What does it cost?** The deterministic backend is free. With an LLM, a dream makes three calls (one per
+phase) when everything fits in `max_chunk_tokens`, more when it is chunked; input is roughly
+*3 × memory + 2 × transcripts* tokens (consolidate sees the memory, verify and insights see both). `--max-sessions`, `--max-total-tokens` and `--max-chunks`
+bound it.
 
-Pipeline phases, each a plain `fn(ctx)` that you can replace via `Pipeline.default().replace("insights", fn)`
-or `insert_after(...)`:
+**Which model should I use?** Start with `deterministic` to see what the heuristics find. For semantic
+merges and subtler corrections use a strong instruction-following model that produces reliable JSON —
+`claude-sonnet-5-5` is the Anthropic default; on local hardware, a 7–14B instruct model with
+`--max-chunk-tokens` set to its context window works for small stores.
 
-1. **load:** adapter + transcript loaders
-2. **redact:** API keys (Anthropic/OpenAI/GitHub/Slack/Google), AWS keys, JWTs, bearer tokens, private-key
-   blocks, URL credentials, `password=`/`token:` assignments, and optionally emails. This runs **before**
-   any analysis or LLM call. Reports and diffs only contain redacted text. Untouched entries keep their
-   original bytes in the output store.
-3. **limits:** max sessions, max bytes per transcript (keeps the most recent messages), max total tokens
-   (drops the oldest sessions). Either truncate with a notice in the report or `--on-limit fail`.
-4. **consolidate:** near-duplicate detection (normalized text, stemmed token sets, sequence ratio, while
-   refusing to merge notes whose numbers, directions or values differ); claim extraction (subject, value,
-   polarity) to detect stale facts (newest by timestamp, else store order) and preference reversals.
-5. **verify:** each memory claim is checked against transcript sentences that mention its subject.
-   Value slots (directions, numbers, on/off states) or generic `X is Y` values are compared. Evidence is
-   weighted: confirmations (*found, actually, turns out…*) count double, failures and negations (*no X here,
-   can't find*) refute, and plans or beliefs (*heading north, my notes say*) are **not** evidence. A
-   correction needs a supported alternative that beats the old value, and it cites every observation used.
-   When an entity appears in several places (e.g. PokéCenters in several cities), the most recently
-   mentioned qualifier decides which note a sentence is about.
-6. **insights:** frequency counting across sessions: failure-marked statements clustered by content
-   (recurring mistakes), preference statements repeated in ≥2 sessions, preference flips across sessions
-   (temporal contradictions), and command sequences recurring across sessions (workflows). Insights that
-   duplicate existing memory are skipped.
-7. **write:** the new store via the adapter, `report.json`, `report.md`, and the diff.
+**What if the model hallucinates?** Proposals are validated against the real store and transcripts:
+unknown entry ids and made-up citations are dropped, a quote that isn't in the cited message is replaced
+by the real message text (and flagged), corrections without verifiable evidence become flags, and you still
+review everything before it is applied.
 
-Every change is an `Operation` with a stable id (a hash of type, targets and result) and `depends_on`
-links, so partial accepts stay consistent. `--only` pulls in dependencies, and `--exclude` drops dependents.
+**Can it run automatically?** Yes: `agentdream schedule` (idle / interval / every N sessions) or the
+Claude Code hook (`install-claude-hook`). Both are dry runs unless you opt in to `--apply`.
 
-**LLM backends** implement `complete(system, prompt, json_schema=None) -> str`. Each analysis phase sends
-the memory (with ids) and transcripts (each line prefixed with its citation), and asks for a JSON list of
-operations. Output is repaired (code fences, trailing commas, Python literals, truncated JSON) and
-**validated**: unknown ids are dropped, citations must exist, and quotes must match. A correction without
-verifiable evidence is downgraded to a flag. An insight without evidence is dropped. If the call or the
-parse fails, the phase falls back to the deterministic heuristics and a warning is recorded in the report.
+## Limitations
 
-**Safety:** dry run by default; the input is never written to (adapters refuse to write over their
-input, SQLite is opened `mode=ro`, and the tests hash every input file before and after for every
-adapter); writes are atomic (temp file or directory plus rename); `accept` refuses if the store changed
-since the dream (unless `--force`) and backs up the original into the job directory first.
+* The deterministic engine is heuristic English-language pattern matching (subjects, polarity, typed
+  values like directions, numbers and on/off states). It is precise on clear-cut cases but misses
+  paraphrases an LLM would catch, and it does not understand other languages.
+* LLM results depend on the model; small local models can produce shallow or inconsistent proposals
+  (they are validated, but may be few). Chunked runs see one part of the input per call: duplicates or
+  evidence split across chunks are reconciled by the reduce step only if each chunk proposes them.
+* Token counts are estimated (~4 characters per token), not computed with the model's tokenizer.
+* When an operation rewrites a note that contained a redacted secret, the new note carries the
+  `[REDACTED:…]` placeholder; the report warns about it.
+* Markdown stores are parsed as one entry per bullet / paragraph (or per file with front matter); exotic
+  layouts may be re-rendered more coarsely than you wrote them (only changed blocks are re-rendered).
+* Windows is not covered by CI (the code avoids POSIX-only APIs where possible; file locking uses
+  `msvcrt` there).
 
-## Limitations (honest)
+## Contributing
 
-- The **deterministic engine is English-centric pattern matching**, not language understanding. It
-  handles common phrasings ("X is north of Y", "don't use A", "maybe A is better", "always do B",
-  "port 8080 → 9090") and is deliberately conservative: when evidence is weak it does nothing or raises a
-  flag-only contradiction. Paraphrases, coreference beyond "it/that", sarcasm, and multi-hop reasoning need
-  an LLM backend.
-- Recency for memory-vs-memory conflicts comes from explicit timestamps (front matter, JSON fields,
-  inline ISO dates). Without them it falls back to store order, which may not be chronological.
-  Transcripts are treated as newer than memory unless timestamps say otherwise.
-- The LLM backends send the whole (redacted, size-limited) context in one prompt per phase. There is no
-  chunking or map-reduce for very large inputs yet, so use the size limits.
-- Redaction is regex-based. It catches common secret formats, not every secret.
-- The scheduler is a foreground polling loop (run it under systemd, launchd, cron or tmux). Cron
-  *expressions* are not supported, only intervals, idle time and session counts.
-- The stancelog adapter rewrites the belief log as one `remember()` per current belief. Closed history
-  is kept only as metadata and is not replayed as events, and event ids and `recorded_at` times are new.
-- Markdown granularity is bullet/paragraph based, so prose-heavy notes become coarse entries.
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The core stays stdlib-only;
+`pip install -e ".[dev]"`, then `python -m pytest -q`, `ruff check src tests examples` and `mypy`.
 
-## Development
+## Credits
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Tests: `python -m pytest -q` (fast, no network; the live
-`claude-cli` smoke test runs only with `AGENTDREAM_LIVE=1`).
+* Anthropic, [Dreams (Claude Managed Agents)](https://platform.claude.com/docs/en/managed-agents/dreams)
+  — the workflow this project reimplements in the open, and
+  [The components of agent memory](https://www.anthropic.com/research/components-of-agent-memory).
+  The PokéCenter example is a nod to the *Claude Plays Pokémon* story of a wrong note corrected from logs.
+* Lin, Snell, Wang, Packer, Wooders, Stoica, Gonzalez — *Sleep-time Compute: Beyond Inference Scaling at
+  Test-time*, Letta / UC Berkeley, [arXiv:2504.13171](https://arxiv.org/abs/2504.13171).
+* [stancelog](https://github.com/systemagents-ai/stancelog) for the contradiction-aware belief-log adapter.
 
-## License
-
-MIT © 2026 systemagents-ai
+MIT licensed. © 2026 systemagents-ai.
