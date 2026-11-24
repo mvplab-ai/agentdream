@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an adapter, backend, loader, or workflow change.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that agentdream does not support well today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: A concrete shape is more useful than a feature name. Interfaces for adapters, backends, and loaders are in CONTRIBUTING.md and docs/ARCHITECTURE.md.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Please keep the core stdlib-only. Optional integrations should import lazily.

@@ -41,7 +41,10 @@ agentdream = "agentdream.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/systemagents-ai/agentdream"
+Repository = "https://github.com/systemagents-ai/agentdream"
+Documentation = "https://github.com/systemagents-ai/agentdream#60-second-quickstart"
 Issues = "https://github.com/systemagents-ai/agentdream/issues"
+Changelog = "https://github.com/systemagents-ai/agentdream/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentdream"]

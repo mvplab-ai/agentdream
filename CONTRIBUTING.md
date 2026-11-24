@@ -2,6 +2,9 @@
 
 Thanks for helping! agentdream aims to stay small, dependable and dependency-free.
 
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports belong in
+[SECURITY.md](SECURITY.md), not in a public issue.
+
 ## Ground rules
 
 - **The core stays stdlib-only.** No required runtime dependencies. HTTP goes through `urllib`, MCP is

@@ -1,0 +1,53 @@
+name: Bug report
+description: Something did not work the way the docs or the CLI said it would.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a security issue, please use
+        [private vulnerability reporting](https://github.com/systemagents-ai/agentdream/security/advisories/new)
+        instead of a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what did you see?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Prefer a command plus a small memory store / transcript you can share, with secrets removed.
+      placeholder: |
+        1. agentdream dream --memory ... --sessions ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: agentdream version
+      description: Output of `agentdream --version`, or the git commit.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "Python version, OS, and backend (deterministic / ollama / anthropic / claude-cli / openai)."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or report excerpt
+      description: Paste relevant CLI output or a redacted `report.md` section. Do not include secrets.
+      render: text
