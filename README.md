@@ -33,8 +33,9 @@ The idea comes from two sources:
   entries replaced, notes verified against what actually happened, new insights surfaced). Anthropic's
   example is *Claude Plays Pokémon*: a wrong note about where the PokéCenter was got corrected from the
   logs, which got the agent out of a loop.
-  See [Anthropic's announcement](https://www.anthropic.com/news) and the
-  [Claude docs](https://docs.anthropic.com/).
+  See [the Dreams docs](https://platform.claude.com/docs/en/managed-agents/dreams),
+  [the launch post](https://claude.com/resources/articles/new-in-claude-managed-agents) and
+  ["The components of agent memory"](https://www.anthropic.com/research/components-of-agent-memory).
 - **Sleep-time compute** (Letta / UC Berkeley): *"Sleep-time Compute: Beyond Inference Scaling at Test-time"*,
   [arXiv:2504.13171](https://arxiv.org/abs/2504.13171). Use idle time to pre-process context so test-time
   inference is cheaper and better.

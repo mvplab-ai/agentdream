@@ -7,7 +7,7 @@ import pytest
 
 from agentdream import dream
 
-from conftest import write, write_jsonl
+from conftest import final_contents, write, write_jsonl
 
 pytestmark = pytest.mark.live
 
@@ -24,3 +24,8 @@ def test_claude_cli_live(tmp_path):
     job = dream(mem, [s], backend="claude-cli")
     assert job.status == "completed", job.error
     assert job.report["backend"].startswith("claude-cli")
+    ops = job.report.get("operations", [])
+    assert any(o.get("origin") == "claude-cli" for o in ops), job.report.get("warnings")
+    store_text = "\n".join(final_contents(job))
+    assert "south" in store_text.lower(), store_text
+    assert "north of the gym" in (mem / "MEMORY.md").read_text()  # input untouched
