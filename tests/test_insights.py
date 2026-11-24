@@ -70,7 +70,7 @@ def test_insight_already_in_memory_is_skipped(tmp_path):
     write(s / "1.txt", "User: Please always use type hints in Python code.\n")
     write(s / "2.txt", "User: Always use type hints in Python code.\n")
     job = dream(_mem(tmp_path, "- Always use type hints in Python code.\n"), [s])
-    assert [o for o in ops_of(job, "insight")] == []
+    assert list(ops_of(job, "insight")) == []
 
 
 def test_insights_land_in_new_file_for_markdown(tmp_path):

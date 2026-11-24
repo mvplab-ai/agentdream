@@ -108,7 +108,8 @@ def build_report(*, job_id: str, config: dict[str, Any], ops: list[Operation], o
 def _evidence_lines(op: Operation) -> list[str]:
     out = []
     for ev in op.evidence:
-        out.append(f"  - `{ev.citation}` ({ev.stance}{', ' + ev.role if ev.role else ''}): \"{shorten(ev.quote, 200)}\"")
+        role = f", {ev.role}" if ev.role else ""
+        out.append(f"  - `{ev.citation}` ({ev.stance}{role}): \"{shorten(ev.quote, 200)}\"")
     return out
 
 

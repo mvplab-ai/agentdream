@@ -4,11 +4,28 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# One run per ref. A newer push to the same PR cancels the older, now-obsolete run; runs on main are
+# never cancelled (every commit on main gets a full result). The group is workflow-level on purpose:
+# job-level groups keyed only on the ref would make the matrix jobs of a single push cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUTF8: "1"
+  STANCELOG_SPEC: "stancelog @ git+https://github.com/systemagents-ai/stancelog"
 
 jobs:
   test:
     name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -17,18 +34,56 @@ jobs:
         include:
           - os: macos-latest
             python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.10"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pytest
+          python -m pip install -e ".[dev]" "$STANCELOG_SPEC"
       - name: Check the core has no runtime dependencies
-        run: python -c "import importlib.metadata as m; assert not m.requires('agentdream') or all('extra ==' in r for r in m.requires('agentdream')), m.requires('agentdream')"
-      - name: Test
-        run: python -m pytest -q
+        run: python -c "import importlib.metadata as m; r = m.requires('agentdream') or []; assert all('extra ==' in x for x in r), r"
+      - name: stancelog adapter is importable (its tests must run, not skip)
+        run: python -c "import stancelog, agentdream.adapters.stancelog as a; assert a.available()"
+      - name: Test (with coverage)
+        run: >
+          python -m pytest -q -rs
+          --cov=agentdream --cov-report=term-missing --cov-report=xml:coverage.xml
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Run the example
         run: python examples/run_example.py > /dev/null
+      - name: CLI smoke test
+        run: |
+          agentdream --version
+          agentdream dream --memory examples/memory --sessions examples/sessions --jobs-dir "$RUNNER_TEMP/jobs" --json > /dev/null
+
+  lint:
+    name: lint (ruff + mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: ruff
+        run: ruff check src tests examples

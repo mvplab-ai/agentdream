@@ -66,7 +66,7 @@ def test_every_n_sessions(tmp_path):
     _session(s, "c.txt", clock.t)
     assert sch.check() is None
     # state persists across scheduler restarts
-    sch2, _, calls2 = _sched(tmp_path, clock, new_sessions=2)
+    sch2, _, _calls2 = _sched(tmp_path, clock, new_sessions=2)
     assert [p.name for p in sch2.pending_sessions()] == ["c.txt"]
 
 

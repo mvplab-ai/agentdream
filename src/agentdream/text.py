@@ -243,7 +243,8 @@ _OBJ_STOP = re.compile(
     r"\s+(?:for|because|since|as|instead of|rather than|over|than|when|while|in|on|to|unless|until|if|so|"
     r"but|and then|which|that|after|before|anymore|any more|again|here|there)\b|[,;:.!?()\[\]\"]|\s+[—–-]\s+")
 _LEADING_FILLER = re.compile(r"^(?:(?:ok(?:ay)?|so|well|hmm|actually|maybe|perhaps|honestly|also|and|but|please|"
-                             r"i think|i guess|on reflection|after all|in the end|ultimately|note|rule)[,:]?\s+)+", re.I)
+                             r"i think|i guess|on reflection|after all|in the end|ultimately|note|rule)[,:]?\s+)+",
+                             re.I)
 
 
 @dataclass
@@ -258,7 +259,7 @@ class Claim:
     slots: dict[str, set[str]] = field(default_factory=dict)
     object_text: str = ""
 
-    def same_subject(self, other: "Claim") -> bool:
+    def same_subject(self, other: Claim) -> bool:
         if not self.subject or not other.subject:
             return False
         if self.kind == "preference" or other.kind == "preference":

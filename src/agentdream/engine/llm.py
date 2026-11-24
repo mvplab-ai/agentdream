@@ -54,7 +54,8 @@ OPERATIONS_SCHEMA: dict[str, Any] = {
 }
 
 PHASE_TASKS = {
-    "consolidate": ("Task: CONSOLIDATE the memory store. Find duplicates / near-duplicates (merge), stale values that a "
+    "consolidate": ("Task: CONSOLIDATE the memory store. Find duplicates / near-duplicates (merge), stale values "
+                    "that a "
                     "newer entry supersedes (replace, judge recency by timestamps or later position), and stance "
                     "reversals between entries (contradiction, kind=temporal). Only use operation types merge, "
                     "replace, contradiction."),

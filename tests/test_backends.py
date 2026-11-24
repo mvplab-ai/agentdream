@@ -18,7 +18,8 @@ def _setup(tmp_path):
                 "- The PokéCenter in Viridian City is north of the gym.\n- Use pytest.\n- Use pytest!\n").parent
     s = tmp_path / "s"
     log = write_jsonl(s / "1.jsonl", [{"role": "assistant", "content": "No PokéCenter north of the gym."},
-                                      {"role": "assistant", "content": "Found the PokéCenter! It is south of the gym."}])
+                                      {"role": "assistant",
+                                       "content": "Found the PokéCenter! It is south of the gym."}])
     return mem, s, log
 
 

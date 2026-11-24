@@ -37,7 +37,8 @@ def test_claude_code_session(tmp_path):
         {"type": "user", "message": {"role": "user", "content": [
             {"type": "tool_result", "content": "lots of passing output"}]}},
         {"type": "user", "message": {"role": "user", "content": [
-            {"type": "tool_result", "is_error": True, "content": [{"type": "text", "text": "ModuleNotFoundError: x"}]}]}},
+            {"type": "tool_result", "is_error": True,
+             "content": [{"type": "text", "text": "ModuleNotFoundError: x"}]}]}},
         {"type": "user", "message": {"role": "user", "content": "<local-command-stdout>noise</local-command-stdout>"}},
     ]
     p = write_jsonl(tmp_path / "abc123.jsonl", rows)

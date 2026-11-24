@@ -130,8 +130,8 @@ def test_mcp_stdio_subprocess(tmp_path):
     stdin = "\n".join(json.dumps(r) for r in reqs) + "\nnot json\n"
     r = subprocess.run([sys.executable, "-m", "agentdream", "serve-mcp"], input=stdin, capture_output=True,
                        text=True, env=env, timeout=60)
-    lines = [json.loads(l) for l in r.stdout.splitlines() if l.strip()]
-    assert [l.get("id") for l in lines] == [1, 2, 3, None]
+    lines = [json.loads(ln) for ln in r.stdout.splitlines() if ln.strip()]
+    assert [ln.get("id") for ln in lines] == [1, 2, 3, None]
     assert lines[0]["result"]["protocolVersion"] == "2025-06-18"
     assert len(lines[1]["result"]["tools"]) == 6
     assert json.loads(lines[2]["result"]["content"][0]["text"])["status"] == "completed"

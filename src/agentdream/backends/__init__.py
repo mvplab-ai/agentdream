@@ -62,5 +62,15 @@ def get_backend(spec: str | LLMBackend | None = "deterministic", model: str | No
     return cls(model=model, **options)
 
 
-__all__ = ["BackendError", "LLMBackend", "http_post_json", "get_backend", "register_backend", "available_backends",
-           "DeterministicBackend", "AnthropicBackend", "OpenAIBackend", "ClaudeCLIBackend"]
+__all__ = [
+    "AnthropicBackend",
+    "BackendError",
+    "ClaudeCLIBackend",
+    "DeterministicBackend",
+    "LLMBackend",
+    "OpenAIBackend",
+    "available_backends",
+    "get_backend",
+    "http_post_json",
+    "register_backend",
+]

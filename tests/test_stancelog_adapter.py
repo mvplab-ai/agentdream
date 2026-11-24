@@ -6,11 +6,11 @@ import pytest
 
 stancelog = pytest.importorskip("stancelog")
 
-from agentdream import accept, dream, get_adapter  # noqa: E402
-from agentdream.adapters import AdapterError  # noqa: E402
-from agentdream.adapters.stancelog import StancelogAdapter  # noqa: E402
+from agentdream import accept, dream, get_adapter
+from agentdream.adapters import AdapterError
+from agentdream.adapters.stancelog import StancelogAdapter
 
-from conftest import hash_tree, ops_of, write  # noqa: E402
+from conftest import hash_tree, ops_of, write
 
 
 def make_db(path, rows):
@@ -124,7 +124,7 @@ def test_dream_a_bad_then_a_good_unlinked_subjects(tmp_path):
 
 
 def test_write_round_trip(tmp_path):
-    db = make_db(tmp_path / "mem" / "beliefs.db", BASIC + [("Always run pytest before committing.", "2026-03-01")])
+    db = make_db(tmp_path / "mem" / "beliefs.db", [*BASIC, ("Always run pytest before committing.", "2026-03-01")])
     ad = StancelogAdapter(f"stancelog:{db}")
     entries = ad.load()
     dest = tmp_path / "new" / "beliefs.db"
@@ -157,7 +157,7 @@ def test_write_new_entry_without_subject(tmp_path):
     ad = StancelogAdapter(f"stancelog:{db}")
     from agentdream.models import MemoryEntry
 
-    entries = ad.load() + [MemoryEntry(id="ins-1", content="Prefer small, focused pull requests.")]
+    entries = [*ad.load(), MemoryEntry(id="ins-1", content="Prefer small, focused pull requests.")]
     dest = ad.write(entries, tmp_path / "new.db")
     out = load(dest)
     assert len(out) == 3

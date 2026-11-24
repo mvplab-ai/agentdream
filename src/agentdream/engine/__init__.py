@@ -32,4 +32,4 @@ def run_analysis_phase(ctx: DreamContext, phase: str) -> None:
         ctx.add_op(op)
 
 
-__all__ = ["run_analysis_phase", "parse_json_loose", "HEURISTICS"]
+__all__ = ["HEURISTICS", "parse_json_loose", "run_analysis_phase"]

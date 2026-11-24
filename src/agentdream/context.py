@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .models import MemoryEntry, Operation, Transcript, apply_operations
-from .text import split_sentences, content_tokens, fold
+from .text import content_tokens, fold, split_sentences
 from .util import parse_timestamp
 
 
@@ -47,7 +48,7 @@ class DreamConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "DreamConfig":
+    def from_dict(cls, d: dict[str, Any]) -> DreamConfig:
         known = set(cls.__dataclass_fields__)
         return cls(**{k: v for k, v in d.items() if k in known})
 

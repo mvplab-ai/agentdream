@@ -5,7 +5,7 @@ import sqlite3
 
 import pytest
 
-from agentdream import DreamLimitError, MemoryEntry, Redactor, accept, dream, redact
+from agentdream import MemoryEntry, Redactor, accept, dream, redact
 from agentdream.adapters import create_sqlite_store
 
 from conftest import hash_tree, ops_of, write, write_jsonl

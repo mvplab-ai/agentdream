@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import hashlib
 import json
@@ -32,10 +33,8 @@ def atomic_write_bytes(path: str | os.PathLike, data: bytes) -> None:
             os.fsync(f.fileno())
         os.replace(tmp, p)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
 
 
@@ -77,7 +76,8 @@ def remove_path(p: str | os.PathLike) -> None:
         pp.unlink()
 
 
-_DUR = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(s|sec|secs|seconds?|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?|w|weeks?)?\s*$", re.I)
+_DUR = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*"
+                  r"(s|sec|secs|seconds?|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?|w|weeks?)?\s*$", re.I)
 _DUR_MULT = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 

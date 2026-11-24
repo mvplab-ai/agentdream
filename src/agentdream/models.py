@@ -5,8 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 OP_TYPES = ("merge", "replace", "correct", "insight", "contradiction")
 
@@ -42,7 +43,7 @@ class MemoryEntry:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "MemoryEntry":
+    def from_dict(cls, d: dict[str, Any]) -> MemoryEntry:
         return cls(
             id=str(d["id"]),
             content=str(d.get("content", "")),
@@ -54,7 +55,7 @@ class MemoryEntry:
             source=d.get("source"),
         )
 
-    def copy(self) -> "MemoryEntry":
+    def copy(self) -> MemoryEntry:
         return copy.deepcopy(self)
 
     @property
@@ -117,12 +118,12 @@ class Evidence:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Evidence":
+    def from_dict(cls, d: dict[str, Any]) -> Evidence:
         return cls(**{k: d.get(k) for k in ("citation", "quote", "source_path", "line_no", "role", "timestamp")},
                    stance=d.get("stance") or "supports")
 
     @classmethod
-    def from_message(cls, msg: Message, quote: str, stance: str = "supports") -> "Evidence":
+    def from_message(cls, msg: Message, quote: str, stance: str = "supports") -> Evidence:
         q = " ".join(quote.split())
         if len(q) > 240:
             q = q[:237] + "..."
@@ -163,7 +164,7 @@ class Operation:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Operation":
+    def from_dict(cls, d: dict[str, Any]) -> Operation:
         return cls(
             id=d["id"], type=d["type"], summary=d.get("summary", ""), reason=d.get("reason", ""),
             targets=list(d.get("targets") or []), remove=list(d.get("remove") or []),
@@ -202,7 +203,7 @@ def resolve_dependencies(ops: list[Operation], selected: Iterable[str]) -> list[
     """Expand a selection of op ids with their (transitive) dependencies."""
     by_id = {o.id: o for o in ops}
     out: set[str] = set()
-    stack = [s for s in selected]
+    stack = list(selected)
     while stack:
         cur = stack.pop()
         if cur in out or cur not in by_id:

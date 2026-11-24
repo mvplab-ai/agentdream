@@ -97,7 +97,7 @@ def get_adapter(path: str | Path, format: str | None = None, **options) -> Memor
         return _REGISTRY["stancelog"](path, **options)
     if not p.exists():
         raise AdapterError(f"memory store not found: {path}")
-    for name, cls in _REGISTRY.items():
+    for _name, cls in _REGISTRY.items():
         try:
             if cls.detect(p):
                 return cls(p, **options)
@@ -109,6 +109,13 @@ def get_adapter(path: str | Path, format: str | None = None, **options) -> Memor
 
 
 __all__ = [
-    "AdapterError", "MemoryAdapter", "MarkdownAdapter", "JSONAdapter", "SQLiteAdapter", "create_sqlite_store",
-    "register_adapter", "get_adapter", "available_adapters",
+    "AdapterError",
+    "JSONAdapter",
+    "MarkdownAdapter",
+    "MemoryAdapter",
+    "SQLiteAdapter",
+    "available_adapters",
+    "create_sqlite_store",
+    "get_adapter",
+    "register_adapter",
 ]

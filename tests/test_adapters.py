@@ -6,8 +6,14 @@ import sqlite3
 import pytest
 
 from agentdream import MemoryEntry, available_adapters, get_adapter, register_adapter
-from agentdream.adapters import AdapterError, JSONAdapter, MarkdownAdapter, MemoryAdapter, SQLiteAdapter, \
-    create_sqlite_store
+from agentdream.adapters import (
+    AdapterError,
+    JSONAdapter,
+    MarkdownAdapter,
+    MemoryAdapter,
+    SQLiteAdapter,
+    create_sqlite_store,
+)
 
 from conftest import write, write_jsonl
 
@@ -35,7 +41,8 @@ make deploy
 def test_markdown_granularity_and_roundtrip(tmp_path):
     root = tmp_path / "mem"
     write(root / "MEMORY.md", MD)
-    write(root / "feedback_x.md", "---\nname: terse\ndescription: be terse\ntype: feedback\nupdated: 2026-03-01\n---\n\n"
+    write(root / "feedback_x.md", "---\nname: terse\ndescription: be terse\ntype: feedback\n"
+          "updated: 2026-03-01\n---\n\n"
                                   "Keep answers short.\n\n**Why:** user asked.\n")
     write(root / "img.png", "binary-ish")
     ad = get_adapter(root)
@@ -97,11 +104,13 @@ def test_markdown_single_file(tmp_path):
 @pytest.mark.parametrize("shape", ["list", "wrapped", "map", "jsonl"])
 def test_json_roundtrip(tmp_path, shape):
     if shape == "jsonl":
-        p = write_jsonl(tmp_path / "m.jsonl", [{"id": "a", "text": "Alpha.", "tags": ["x"]}, {"id": "b", "text": "Beta."}])
+        p = write_jsonl(tmp_path / "m.jsonl", [{"id": "a", "text": "Alpha.", "tags": ["x"]},
+                                         {"id": "b", "text": "Beta."}])
     else:
         data = {"list": [{"id": "a", "content": "Alpha.", "updated_at": "2026-01-01", "tags": ["x"]},
                          {"id": "b", "content": "Beta."}],
-                "wrapped": {"version": 2, "memories": [{"id": "a", "content": "Alpha."}, {"id": "b", "content": "Beta."}]},
+                "wrapped": {"version": 2, "memories": [{"id": "a", "content": "Alpha."},
+                                                   {"id": "b", "content": "Beta."}]},
                 "map": {"a": "Alpha.", "b": "Beta."}}[shape]
         p = tmp_path / "m.json"
         p.write_text(json.dumps(data))
@@ -132,7 +141,7 @@ def test_json_folder(tmp_path):
     assert isinstance(ad, JSONAdapter) and not ad.single_file
     es = ad.load()
     assert {e.path for e in es} == {"a.jsonl", "sub/b.json"}
-    ad.write(es + [MemoryEntry("3", "Three.")], tmp_path / "o")
+    ad.write([*es, MemoryEntry("3", "Three.")], tmp_path / "o")
     assert {e.content for e in JSONAdapter(tmp_path / "o").load()} == {"One.", "Two.", "Three."}
 
 
@@ -186,7 +195,7 @@ def test_registry_and_errors(tmp_path):
             return path.suffix == ".upper"
 
         def load(self):
-            return [MemoryEntry(str(i), l) for i, l in enumerate(self.path.read_text().splitlines())]
+            return [MemoryEntry(str(i), ln) for i, ln in enumerate(self.path.read_text().splitlines())]
 
         def write(self, entries, dest):
             dest.write_text("\n".join(e.content.upper() for e in entries))

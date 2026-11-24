@@ -1,6 +1,7 @@
 """Duplicate merge, stale replacement and temporal contradictions."""
 
 import json
+from pathlib import Path
 
 from agentdream import dream
 
@@ -31,7 +32,8 @@ def test_duplicate_merge(tmp_path):
 
 
 def test_values_differing_are_not_duplicates(tmp_path):
-    mem = write(tmp_path / "mem" / "a.md", "- Use 4 spaces for indentation in Python.\n- Use 2 spaces for indentation in YAML.\n")
+    mem = write(tmp_path / "mem" / "a.md",
+                "- Use 4 spaces for indentation in Python.\n- Use 2 spaces for indentation in YAML.\n")
     job = dream(mem.parent, [_one_session(tmp_path)])
     assert ops_of(job, "merge") == []
 
@@ -45,7 +47,7 @@ def test_merge_across_files_and_json(tmp_path):
     job = dream(store, [_one_session(tmp_path)])
     (m,) = ops_of(job, "merge")
     assert m.remove == ["a"]  # newest survives
-    data = json.loads(open(job.store_path).read())
+    data = json.loads(Path(job.store_path).read_text())
     assert [d["id"] for d in data] == ["b"]
 
 
@@ -89,7 +91,7 @@ def test_temporal_contradiction_in_memory(tmp_path):
     assert current.startswith("Use SQLAlchemy for the data layer")
     assert "History" in current and "Don't use SQLAlchemy" in current
     assert c.history and "2026-01-10" in c.history[0]
-    entries = json.loads(open(job.store_path).read())["entries"]
+    entries = json.loads(Path(job.store_path).read_text())["entries"]
     assert len(entries) == 1 and entries[0]["content"] == current
     assert entries[0]["metadata"]["history"][0]["content"].startswith("Don't use SQLAlchemy")
     assert job.report["counts"]["temporal_contradictions"] == 1
@@ -101,7 +103,8 @@ def test_temporal_contradiction_memory_vs_later_transcript(tmp_path):
     mem = write(tmp_path / "m" / "MEMORY.md", "- Never use pnpm in this repo. (2026-01-02)\n")
     s = tmp_path / "s"
     write_jsonl(s / "late.jsonl", [
-        {"role": "user", "content": "I benchmarked again and pnpm is much faster.", "timestamp": "2026-05-01T10:00:00Z"},
+        {"role": "user", "content": "I benchmarked again and pnpm is much faster.",
+         "timestamp": "2026-05-01T10:00:00Z"},
         {"role": "user", "content": "Let's use pnpm from now on.", "timestamp": "2026-05-01T10:01:00Z"},
     ])
     job = dream(mem.parent, [s])
@@ -115,7 +118,8 @@ def test_temporal_contradiction_memory_vs_later_transcript(tmp_path):
 def test_newer_memory_beats_older_transcript(tmp_path):
     mem = write(tmp_path / "m" / "MEMORY.md", "- Don't use Docker for local dev. (2026-06-01)\n")
     s = tmp_path / "s"
-    write_jsonl(s / "old.jsonl", [{"role": "user", "content": "Use Docker for local dev.", "timestamp": "2026-01-01T00:00:00Z"}])
+    write_jsonl(s / "old.jsonl", [{"role": "user", "content": "Use Docker for local dev.",
+                                   "timestamp": "2026-01-01T00:00:00Z"}])
     job = dream(mem.parent, [s])
     (c,) = ops_of(job, "contradiction")
     assert not c.changes_store  # flag only
@@ -126,7 +130,8 @@ def test_temporal_contradiction_transcripts_only(tmp_path):
     mem = write(tmp_path / "m" / "MEMORY.md", "- The project is called Falcon.\n")
     s = tmp_path / "s"
     write(s / "01.txt", "User: Don't use Tailwind for styling, plain CSS is enough.\nAssistant: OK.\n")
-    write(s / "02.txt", "User: Hmm, maybe Tailwind is better for this after all. Use Tailwind.\nAssistant: Switching.\n")
+    write(s / "02.txt",
+          "User: Hmm, maybe Tailwind is better for this after all. Use Tailwind.\nAssistant: Switching.\n")
     job = dream(mem.parent, [s])
     cons = [c for c in ops_of(job, "contradiction") if c.kind == "temporal"]
     assert len(cons) == 1

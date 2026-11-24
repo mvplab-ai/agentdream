@@ -31,7 +31,7 @@ dependencies = []
 # All built-in LLM backends use urllib / subprocess, so no SDK extra is needed.
 # The stancelog adapter is optional and imported lazily: pip install "agentdream[stancelog]".
 stancelog = ["stancelog @ git+https://github.com/systemagents-ai/stancelog"]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "pytest-cov>=4", "coverage[toml]>=7", "ruff>=0.6", "mypy>=1.10"]
 
 [tool.hatch.metadata]
 allow-direct-references = true  # needed for the git URL in the stancelog extra
@@ -54,3 +54,40 @@ testpaths = ["tests"]
 markers = [
     "live: hits a real model (claude-cli); skipped unless AGENTDREAM_LIVE=1",
 ]
+
+[tool.coverage.run]
+source = ["agentdream"]
+branch = false
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF"]
+ignore = [
+    # `"a b c".split()` word lists read better than 200-item list literals.
+    "SIM905",
+    # The text heuristics deliberately handle typographic quotes, arrows and dashes.
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# tests import helpers from conftest after pytest.importorskip(...)
+"tests/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agentdream"]
+known-local-folder = ["conftest"]

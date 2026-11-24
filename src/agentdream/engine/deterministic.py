@@ -15,13 +15,35 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..context import DreamContext, SentenceRec
 from ..models import Evidence, MemoryEntry, Operation, stable_hash
-from ..text import (CONFIRM_MARKERS, FAILURE_MARKERS, INTENT_MARKERS, SLOT_VOCAB, Claim, claims_in, containment,
-                    flip_preference, fold, is_negated, jaccard, negated_slots, normalize, numbers, parse_claim,
-                    ratio, replace_word, shorten, slots, strip_dates, strip_markup, token_set, values_conflict)
+from ..text import (
+    CONFIRM_MARKERS,
+    FAILURE_MARKERS,
+    INTENT_MARKERS,
+    SLOT_VOCAB,
+    Claim,
+    claims_in,
+    containment,
+    flip_preference,
+    fold,
+    is_negated,
+    jaccard,
+    negated_slots,
+    normalize,
+    numbers,
+    parse_claim,
+    ratio,
+    replace_word,
+    shorten,
+    slots,
+    strip_dates,
+    strip_markup,
+    token_set,
+    values_conflict,
+)
 from ..util import parse_timestamp
 
 _PRONOUN_START = re.compile(r"^(?:it|it's|its|there|that|this|they|they're|which)\b", re.I)
@@ -64,9 +86,7 @@ def _is_duplicate(a: MemoryEntry, b: MemoryEntry) -> bool:
     if j >= 0.5 and ratio(a.content, b.content) >= 0.85:
         return True
     small, big = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
-    if len(small) >= 3 and containment(small, big) >= 0.9 and j >= 0.6:
-        return True
-    return False
+    return bool(len(small) >= 3 and containment(small, big) >= 0.9 and j >= 0.6)
 
 
 class _UF:
@@ -201,9 +221,8 @@ def _memory_conflicts(ctx: DreamContext) -> None:
                 if ci.polarity != cj.polarity:
                     pref_pairs.append((i, j))
             else:
-                if ci.polarity == cj.polarity and values_conflict(ci, cj):
-                    fact_pairs.append((i, j))
-                elif ci.polarity != cj.polarity and not values_conflict(ci, cj):
+                # same stance + different value, or opposite stance + same value
+                if (ci.polarity == cj.polarity) == values_conflict(ci, cj):
                     fact_pairs.append((i, j))
     used: set[int] = set()
     for group in _components(len(entries), pref_pairs):
@@ -487,11 +506,10 @@ def _pref_claims(ctx: DreamContext) -> list[tuple[SentenceRec, Claim]]:
         c = parse_claim(rec.text)
         if c is None or c.kind != "preference":
             continue
-        if role not in ("user", "log", "unknown"):
-            # assistant narration ("Use X to ...") is weak; require evaluative or explicit wording
-            if c.value in ("use", "avoid") and not re.search(
-                    r"\b(prefer|should|recommend|better|always|never|don'?t|avoid|let'?s)\b", rec.folded):
-                continue
+        # assistant narration ("Use X to ...") is weak; require evaluative or explicit wording
+        if role not in ("user", "log", "unknown") and c.value in ("use", "avoid") and not re.search(
+                r"\b(prefer|should|recommend|better|always|never|don'?t|avoid|let'?s)\b", rec.folded):
+            continue
         out.append((rec, c))
     ctx._pref_cache = out  # type: ignore[attr-defined]
     return out
@@ -560,7 +578,8 @@ def _emit_flag(ctx: DreamContext, entry: MemoryEntry, evidence: list[Evidence], 
                kind: str = "evidence") -> None:
     op = Operation(
         id=Operation.make_id("contradiction", [entry.id], ["flag", reason]),
-        type="contradiction", kind=kind, summary=f"Note contradicted by transcripts: \"{shorten(_clean(entry.content), 80)}\"",
+        type="contradiction", kind=kind,
+        summary=f"Note contradicted by transcripts: \"{shorten(_clean(entry.content), 80)}\"",
         reason=reason, targets=[entry.id], before=[entry.content], evidence=evidence, confidence=0.5,
         phase="verify",
     )
@@ -645,7 +664,8 @@ def _preference_insights(ctx: DreamContext, budget: list[int]) -> None:
             entry = _new_entry(current, "Preferences", ev, {"history": [first_rec.text, last_rec.text]})
             ctx.add_op(Operation(
                 id=Operation.make_id("contradiction", [], [current]), type="contradiction", kind="temporal",
-                summary=f"Preference reversed across sessions; current: \"{shorten(current.split(' (History:')[0], 80)}\"",
+                summary="Preference reversed across sessions; current: "
+                        f"\"{shorten(current.split(' (History:')[0], 80)}\"",
                 reason="An earlier session rejected this and a later one preferred it (or vice versa); the latest "
                        "stance is recorded as current with the earlier one as history.",
                 upsert=[entry], after=[current], evidence=ev,
@@ -681,7 +701,8 @@ def _mistake_insights(ctx: DreamContext, budget: list[int]) -> None:
             continue
         if not FAILURE_MARKERS.search(rec.text):
             continue
-        if INTENT_MARKERS.search(rec.text) and not re.search(r"\b(error|failed|wrong|mistake|oops|forgot)\b", rec.folded):
+        if INTENT_MARKERS.search(rec.text) and not re.search(r"\b(error|failed|wrong|mistake|oops|forgot)\b",
+                                                             rec.folded):
             continue
         sig = _signature(rec.text)
         if len(sig) < 2:
@@ -719,10 +740,11 @@ def _mistake_insights(ctx: DreamContext, budget: list[int]) -> None:
         if _already_known(ctx, rep):
             continue
         ev = [Evidence.from_message(r.msg, r.text, "supports") for r, _ in cl["members"][:6]]
+        top = ", ".join(sorted(counts, key=lambda t: -counts[t])[:4])
         ctx.add_op(Operation(
             id=Operation.make_id("insight", [], [content]), type="insight",
             summary=f"Recurring mistake {sess_txt}: {shorten(rep, 70)}",
-            reason=f"Failure-marked statements with overlapping content ({', '.join(sorted(counts, key=lambda t: -counts[t])[:4])}) recur.",
+            reason=f"Failure-marked statements with overlapping content ({top}) recur.",
             upsert=[_new_entry(content, "Recurring mistakes", ev)], after=[content], evidence=ev,
             confidence=0.6 if n_sessions > 1 else 0.45, phase="insights",
         ))
@@ -811,11 +833,10 @@ def _workflow_insights(ctx: DreamContext, budget: list[int]) -> None:
         while extended:
             extended = False
             for (a, b), s2 in good.items():
-                if a == chain[-1] and b not in chain and sess <= set(s2) | set():
-                    if set(s2) >= sess:
-                        chain.append(b)
-                        extended = True
-                        break
+                if a == chain[-1] and b not in chain and set(s2) >= sess:
+                    chain.append(b)
+                    extended = True
+                    break
         for i in range(len(chain)):
             for j in range(i + 1, len(chain)):
                 used.add((chain[i], chain[j]))

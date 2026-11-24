@@ -47,7 +47,7 @@ class SQLiteAdapter(MemoryAdapter):
 
     def _resolve_table(self, con: sqlite3.Connection) -> tuple[str, list[str], str]:
         tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")]
-        candidates = [self.table] if self.table else (["memories", "memory", "entries", "notes"] + tables)
+        candidates = [self.table] if self.table else (["memories", "memory", "entries", "notes", *tables])
         for t in candidates:
             if t not in tables:
                 continue

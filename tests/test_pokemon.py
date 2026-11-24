@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+from pathlib import Path
 
 from agentdream import dream
 
@@ -44,10 +45,11 @@ def test_pokecenter_note_corrected_with_evidence(tmp_path):
     # evidence cites transcript file + line and quotes it
     cites = [e.citation for e in op.evidence]
     assert any(re.search(r"run3\.jsonl:\d+$", c) for c in cites), cites
-    assert any(re.search(r"run[12]\.jsonl:\d+$", c) and e.stance == "refutes" for c, e in zip(cites, op.evidence))
+    assert any(re.search(r"run[12]\.jsonl:\d+$", c) and e.stance == "refutes"
+               for c, e in zip(cites, op.evidence, strict=True))
     for ev in op.evidence:
         line_no = int(ev.citation.rsplit(":", 1)[1])
-        line = open(ev.source_path, encoding="utf-8").read().splitlines()[line_no - 1]
+        line = Path(ev.source_path).read_text(encoding="utf-8").splitlines()[line_no - 1]
         assert ev.quote.split(".")[0][:20] in json.loads(line)["content"]
     # the new store contains the corrected note; the other note is untouched
     contents = final_contents(job)
@@ -77,7 +79,8 @@ def test_correction_is_general_not_hardcoded(tmp_path):
 def test_number_fact_corrected_from_transcripts(tmp_path):
     mem = write(tmp_path / "m" / "facts.md", "- The dev server runs on port 3000.\n")
     s = tmp_path / "s"
-    write_jsonl(s / "1.jsonl", [{"role": "assistant", "content": "Started it, but the dev server is actually on port 5173."},
+    write_jsonl(s / "1.jsonl", [{"role": "assistant",
+                                 "content": "Started it, but the dev server is actually on port 5173."},
                                 {"role": "user", "content": "Right, the dev server port is 5173 now (Vite)."}])
     job = dream(mem.parent, [s])
     (op,) = ops_of(job, "correct")
@@ -88,8 +91,9 @@ def test_intent_alone_is_not_evidence(tmp_path):
     """The agent repeating its (wrong) belief must not 'confirm' or 'correct' anything."""
     mem = write(tmp_path / "m" / "MEMORY.md", "- The key is under the mat.\n- The vault is left of the stairs.\n")
     s = tmp_path / "s"
-    write_jsonl(s / "1.jsonl", [{"role": "assistant", "content": "My notes say the vault is left of the stairs. Heading left."},
-                                {"role": "assistant", "content": "I will try right of the stairs to find the vault later."}])
+    write_jsonl(s / "1.jsonl", [
+        {"role": "assistant", "content": "My notes say the vault is left of the stairs. Heading left."},
+        {"role": "assistant", "content": "I will try right of the stairs to find the vault later."}])
     job = dream(mem.parent, [s])
     assert ops_of(job, "correct") == []
 

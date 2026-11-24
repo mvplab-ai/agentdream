@@ -103,7 +103,7 @@ class JSONAdapter(MemoryAdapter):
             text = p.read_text(encoding="utf-8")
             if p.suffix.lower() == ".jsonl":
                 self._shapes[rel] = {"kind": "jsonl"}
-                for i, line in enumerate(l for l in text.splitlines() if l.strip()):
+                for i, line in enumerate(ln for ln in text.splitlines() if ln.strip()):
                     entries.append(_entry_from_obj(json.loads(line), rel, i))
                 continue
             data = json.loads(text) if text.strip() else []

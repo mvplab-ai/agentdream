@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from . import __version__
 
@@ -36,10 +36,11 @@ def _dream_args(p: argparse.ArgumentParser) -> None:
 
 
 def _dream_options(a: argparse.Namespace) -> dict:
-    opts = dict(model=a.model, instructions=a.instructions, memory_format=a.memory_format,
-                transcript_format=a.transcript_format, max_sessions=a.max_sessions,
-                max_bytes_per_transcript=a.max_bytes_per_transcript, max_total_tokens=a.max_total_tokens,
-                on_limit=a.on_limit, redact=not a.no_redact, redact_emails=a.redact_emails, jobs_dir=a.jobs_dir)
+    opts = {"model": a.model, "instructions": a.instructions, "memory_format": a.memory_format,
+            "transcript_format": a.transcript_format, "max_sessions": a.max_sessions,
+            "max_bytes_per_transcript": a.max_bytes_per_transcript, "max_total_tokens": a.max_total_tokens,
+            "on_limit": a.on_limit, "redact": not a.no_redact, "redact_emails": a.redact_emails,
+            "jobs_dir": a.jobs_dir}
     if getattr(a, "out", None):
         opts["out"] = a.out
     if a.base_url:

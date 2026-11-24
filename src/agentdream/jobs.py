@@ -63,6 +63,8 @@ class DreamJob:
         self.status = "pending"
         self.review = "pending"
         self.created_at = now_iso()
+        # ISO timestamps have 1s resolution; this orders jobs created within the same second
+        self.created_ns = time.time_ns()
         self.started_at: str | None = None
         self.finished_at: str | None = None
         self.progress = 0.0
@@ -95,7 +97,8 @@ class DreamJob:
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id, "status": self.status, "review": self.review, "created_at": self.created_at,
-            "started_at": self.started_at, "finished_at": self.finished_at, "progress": round(self.progress, 3),
+            "created_ns": self.created_ns, "started_at": self.started_at, "finished_at": self.finished_at,
+            "progress": round(self.progress, 3),
             "phase": self.phase, "error": self.error, "warnings": self.warnings, "counts": self.counts,
             "input_hash": self.input_hash, "out_dir": str(self.out_dir), "store_path": self.store_path,
             "accepted_ops": self.accepted_ops, "applied_to": self.applied_to, "backup_path": self.backup_path,
@@ -115,7 +118,7 @@ class DreamJob:
             atomic_write_json(self.path, self.to_dict())
 
     @classmethod
-    def load(cls, job_id: str, jobs_dir: str | Path | None = None) -> "DreamJob":
+    def load(cls, job_id: str, jobs_dir: str | Path | None = None) -> DreamJob:
         jd = Path(jobs_dir or default_jobs_dir())
         p = jd / job_id / "job.json"
         if not p.exists():
@@ -126,9 +129,9 @@ class DreamJob:
                 raise JobNotFound(f"no such dream job: {job_id}" + (f" (ambiguous: {matches})" if matches else ""))
         d = json.loads(p.read_text(encoding="utf-8"))
         job = cls(DreamConfig.from_dict(d.get("config") or {}), job_id=d["id"], jobs_dir=jd)
-        for k in ("status", "review", "created_at", "started_at", "finished_at", "progress", "phase", "error",
-                  "warnings", "counts", "input_hash", "store_path", "accepted_ops", "applied_to", "backup_path",
-                  "pid"):
+        for k in ("status", "review", "created_at", "created_ns", "started_at", "finished_at", "progress", "phase",
+                  "error", "warnings", "counts", "input_hash", "store_path", "accepted_ops", "applied_to",
+                  "backup_path", "pid"):
             if k in d:
                 setattr(job, k, d[k])
         job.out_dir = Path(d.get("out_dir") or job.dir / "output")
@@ -143,7 +146,7 @@ class DreamJob:
         return job
 
     @classmethod
-    def list(cls, jobs_dir: str | Path | None = None) -> list["DreamJob"]:
+    def list(cls, jobs_dir: str | Path | None = None) -> list[DreamJob]:
         jd = Path(jobs_dir or default_jobs_dir())
         if not jd.exists():
             return []
@@ -154,10 +157,10 @@ class DreamJob:
                     out.append(cls.load(d.name, jd))
                 except (ValueError, KeyError, OSError):
                     continue
-        out.sort(key=lambda j: j.created_at)
+        out.sort(key=lambda j: (j.created_at, j.created_ns or 0, j.id))
         return out
 
-    def refresh(self) -> "DreamJob":
+    def refresh(self) -> DreamJob:
         """Reload persisted state (useful when another process runs the job)."""
         other = DreamJob.load(self.id, self.jobs_dir)
         for k, v in other.__dict__.items():
@@ -168,7 +171,7 @@ class DreamJob:
         return self
 
     # ---------------------------------------------------------------- execution
-    def start(self) -> "DreamJob":
+    def start(self) -> DreamJob:
         """Run in a background thread; returns immediately."""
         if self.status != "pending":
             raise RuntimeError(f"job {self.id} already {self.status}")
@@ -178,12 +181,12 @@ class DreamJob:
         self._thread.start()
         return self
 
-    def wait(self, timeout: float | None = None) -> "DreamJob":
+    def wait(self, timeout: float | None = None) -> DreamJob:
         if self._thread is not None:
             self._thread.join(timeout)
         return self
 
-    def cancel(self) -> "DreamJob":
+    def cancel(self) -> DreamJob:
         self._cancel.set()
         if self.status == "pending":
             self.status = "canceled"
@@ -201,7 +204,7 @@ class DreamJob:
         self.phase = phase
         self.save()
 
-    def run(self) -> "DreamJob":
+    def run(self) -> DreamJob:
         """Run synchronously in this thread."""
         from .pipeline import run_dream
 

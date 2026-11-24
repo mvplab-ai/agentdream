@@ -161,11 +161,11 @@ class StancelogAdapter(MemoryAdapter):
         extra.update({k: v for k, v in md.items() if k not in _OWN_KEYS and not k.startswith("_")})
         if e.id and not unchanged:
             extra.setdefault("agentdream_id", e.id)
-        kwargs: dict[str, Any] = dict(
-            subject=md.get("subject") or e.key, polarity=polarity, confidence=confidence, value=value,
-            source=md.get("source") or "agentdream", valid_from=_valid_time(e.updated_at or md.get("valid_from")),
-            metadata=extra or None,
-        )
+        kwargs: dict[str, Any] = {
+            "subject": md.get("subject") or e.key, "polarity": polarity, "confidence": confidence, "value": value,
+            "source": md.get("source") or "agentdream", "valid_from": _valid_time(e.updated_at or md.get("valid_from")),
+            "metadata": extra or None,
+        }
         if not kwargs["subject"]:
             kwargs.pop("subject")
         try:

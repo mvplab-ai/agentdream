@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .adapters import get_adapter
 from .backends import get_backend
@@ -222,7 +222,7 @@ class Pipeline:
         self.phases = list(phases)
 
     @classmethod
-    def default(cls) -> "Pipeline":
+    def default(cls) -> Pipeline:
         return cls([
             ("load", phase_load),
             ("redact", phase_redact),
@@ -236,15 +236,15 @@ class Pipeline:
     def names(self) -> list[str]:
         return [n for n, _ in self.phases]
 
-    def replace(self, name: str, fn: Phase) -> "Pipeline":
+    def replace(self, name: str, fn: Phase) -> Pipeline:
         self.phases = [(n, fn if n == name else f) for n, f in self.phases]
         return self
 
-    def remove(self, name: str) -> "Pipeline":
+    def remove(self, name: str) -> Pipeline:
         self.phases = [(n, f) for n, f in self.phases if n != name]
         return self
 
-    def insert_after(self, after: str, name: str, fn: Phase) -> "Pipeline":
+    def insert_after(self, after: str, name: str, fn: Phase) -> Pipeline:
         i = self.names().index(after)
         self.phases.insert(i + 1, (name, fn))
         return self
@@ -273,5 +273,15 @@ def run_dream(config: DreamConfig, output_dir: str | Path, *, pipeline: Pipeline
     return ctx
 
 
-__all__ = ["Pipeline", "run_dream", "materialize", "DreamLimitError", "DreamCanceled", "phase_load",
-           "phase_redact", "phase_limits", "phase_write", "make_redactor"]
+__all__ = [
+    "DreamCanceled",
+    "DreamLimitError",
+    "Pipeline",
+    "make_redactor",
+    "materialize",
+    "phase_limits",
+    "phase_load",
+    "phase_redact",
+    "phase_write",
+    "run_dream",
+]

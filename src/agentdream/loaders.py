@@ -22,8 +22,9 @@ import glob as _glob
 import json
 import os
 import re
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from .models import Message, Transcript
 
@@ -174,7 +175,7 @@ def parse_openai(path: str, text: str) -> list[Message]:
 
 def parse_text(path: str, text: str) -> list[Message]:
     lines = text.splitlines()
-    turns = [i for i, l in enumerate(lines) if _TURN.match(l)]
+    turns = [i for i, ln in enumerate(lines) if _TURN.match(ln)]
     msgs: list[Message] = []
     if turns:
         cur_role, cur_lines, cur_ln = None, [], None

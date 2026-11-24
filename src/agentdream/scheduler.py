@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .loaders import expand_sources
 from .util import atomic_write_json, parse_duration
@@ -24,8 +25,10 @@ class Trigger:
 
 
 def _sig(p: Path) -> str:
+    # nanosecond mtimes: a session rewritten within the same second (same size) still counts as new.
+    # (HFS+ only has 1s resolution; APFS/ext4/NTFS are fine.)
     st = p.stat()
-    return f"{st.st_size}:{int(st.st_mtime)}"
+    return f"{st.st_size}:{st.st_mtime_ns}"
 
 
 class Scheduler:
@@ -47,7 +50,7 @@ class Scheduler:
         self.only_new = only_new
         self.dream_options = dict(dream_options or {})
         if dream_fn is None:
-            from .api import dream as dream_fn  # noqa: F811
+            from .api import dream as dream_fn
         self.dream_fn = dream_fn
         jobs_dir = self.dream_options.get("jobs_dir")
         base = Path(jobs_dir).parent if jobs_dir else Path.cwd() / ".agentdream"
