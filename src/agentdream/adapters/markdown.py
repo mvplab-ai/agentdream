@@ -148,7 +148,10 @@ def parse_markdown(rel: str, text: str) -> _ParsedFile:
                         i += 1
                         continue
                     break
-                if _BULLET.match(nxt) or _HEADING.match(nxt) or _FENCE.match(nxt):
+                nb = _BULLET.match(nxt)
+                if nb and len(nb.group(1)) <= len(indent):
+                    break
+                if _HEADING.match(nxt) or (_FENCE.match(nxt) and not nxt.startswith(" " * cont_indent)):
                     break
                 if nxt.startswith(" ") or nxt.startswith("\t"):
                     body.append(nxt[cont_indent:] if nxt.startswith(" " * cont_indent) else nxt.strip())
@@ -241,8 +244,18 @@ class MarkdownAdapter(MemoryAdapter):
         files = self._files()
         by_path: dict[str, list[MemoryEntry]] = {}
         default_new = self.path.name if self.single_file else DEFAULT_NEW_FILE
+        section_home: dict[str, str] = {}
+        for rel_, pf_ in files.items():
+            for b in pf_.blocks:
+                if b.entry.key and pf_.frontmatter is None:
+                    section_home.setdefault(b.entry.key, rel_)
         for e in entries:
-            rel = e.path if (e.path and (e.path in files or not self.single_file)) else default_new
+            if e.path and (e.path in files or not self.single_file):
+                rel = e.path
+            elif e.key and e.key in section_home:
+                rel = section_home[e.key]
+            else:
+                rel = default_new
             by_path.setdefault(rel, []).append(e)
 
         rendered: dict[str, str] = {}
@@ -316,9 +329,10 @@ class MarkdownAdapter(MemoryAdapter):
         tail: list[MemoryEntry] = []
         for x in extras:
             idx = None
-            for bi, b in enumerate(pf.blocks):
-                if x.key and b.entry.key == x.key:
-                    idx = bi
+            same = [bi for bi, b in enumerate(pf.blocks) if x.key and b.entry.key == x.key]
+            bullets = [bi for bi in same if pf.blocks[bi].marker and not pf.blocks[bi].marker[0].isdigit()]
+            if bullets or same:
+                idx = (bullets or same)[-1]
             if idx is None:
                 tail.append(x)
             else:
@@ -342,8 +356,9 @@ class MarkdownAdapter(MemoryAdapter):
                     for x in insert_after.get(bi, []):
                         out.extend(_render_block(x.content, marker, ""))
                     continue
+            use_marker = b.marker if (b.marker and not b.marker[0].isdigit()) else marker
             for x in insert_after.get(bi, []):
-                out.extend(_render_block(x.content, b.marker or marker, b.indent if b.marker else ""))
+                out.extend(_render_block(x.content, use_marker, b.indent if b.marker else ""))
             pos = b.end
         out.extend(lines[pos:])
         if tail:

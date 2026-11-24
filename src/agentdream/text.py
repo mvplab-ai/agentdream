@@ -171,11 +171,21 @@ def split_sentences(text: str) -> list[str]:
         line = line.strip()
         if not line:
             continue
-        for s in re.split(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])|\s+[—–]\s+|;\s+", line):
-            s = s.strip()
-            if s:
-                parts.append(s)
+        pieces = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])|\s+[—–]\s+|;\s+", line)]
+        merged: list[str] = []
+        for s in pieces:
+            if not s:
+                continue
+            if merged and _ABBREV.search(merged[-1]):
+                merged[-1] = merged[-1] + " " + s
+            else:
+                merged.append(s)
+        parts.extend(merged)
     return parts
+
+
+_ABBREV = re.compile(r"(?:^|\s)(?:mt|mr|mrs|ms|dr|st|sr|jr|vs|no|fig|approx|etc|e\.g|i\.e|inc|ltd|co|rd|ave|"
+                     r"[A-Z])\.$", re.I)
 
 
 def _slot_scan(text: str) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
@@ -226,6 +236,7 @@ _EVAL = re.compile(
     r"recommended|nicer|superior|more reliable|winner|worse|worst|bad|broken|slower|terrible|flaky|buggy|"
     r"unreliable|deprecated|rejected|banned|not recommended|a bad idea|a mistake|not good|not great|"
     r"not better|not the way to go)\b", re.I)
+_HABIT = re.compile(r"^(?:always|make sure to|make sure you|be sure to|remember to|you must|must)\s+(?P<obj>.+)", re.I)
 _POS_EVAL = frozenset({"better", "best", "preferred", "preferable", "the way to go", "the right choice", "good",
                        "great", "fine", "faster", "recommended", "nicer", "superior", "more reliable", "winner"})
 _OBJ_STOP = re.compile(
@@ -316,6 +327,14 @@ def parse_claim(sentence: str) -> Claim | None:
         subj = token_set(obj)
         if subj:
             return Claim(sentence, "preference", subj, _core(obj) or subj, "use", frozenset({"use"}), 1,
+                         object_text=obj)
+
+    m = _HABIT.match(text)
+    if m:
+        obj = _clean_object(m.group("obj"))
+        subj = token_set(obj)
+        if subj:
+            return Claim(sentence, "preference", subj, _core(obj) or subj, "always", frozenset({"always"}), 1,
                          object_text=obj)
 
     # Facts: "<subject> is <value>"

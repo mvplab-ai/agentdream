@@ -54,6 +54,9 @@ def _is_duplicate(a: MemoryEntry, b: MemoryEntry) -> bool:
             return False
     if set(sa) != set(sb) and (sa.keys() ^ sb.keys()) & {"direction", "state"}:
         return False
+    ca, cb = _main_claim(a), _main_claim(b)
+    if ca and cb and ca.kind == cb.kind == "fact" and ca.same_subject(cb) and values_conflict(ca, cb):
+        return False  # same subject, different value: a staleness question, not a duplicate
     ta, tb = token_set(a.content), token_set(b.content)
     j = jaccard(ta, tb)
     if j >= 0.75:
