@@ -26,6 +26,9 @@ jobs:
     name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    # macOS jobs are best-effort: GitHub often cannot acquire macos-latest runners, and
+    # that was keeping the CI badge red even when every Ubuntu job and lint passed.
+    continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
     strategy:
       fail-fast: false
       matrix:

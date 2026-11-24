@@ -82,6 +82,6 @@ src/agentdream/
 ## Pull requests
 
 - Keep PRs focused; include tests; run `python -m pytest -q`, `ruff check` and `mypy` locally (CI runs
-  Python 3.10–3.13 on Linux plus macOS, and the lint job).
+  Python 3.10–3.13 on Linux, plus a best-effort macOS job, and the lint job).
 - Describe behaviour changes in the README if they are user-visible.
 - Be kind in reviews.

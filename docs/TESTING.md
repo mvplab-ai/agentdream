@@ -42,8 +42,10 @@ ANTHROPIC_API_KEY=... pytest tests/live -q                         # Anthropic M
 | Live backends | `tests/test_live.py`, `tests/live/` | Only with the env vars above; **never CI** | Real `claude-cli` / Ollama / Anthropic. A recording wrapper asserts planted secrets never leave the machine. |
 
 CI (`.github/workflows/ci.yml`) runs the default pytest with coverage (`fail_under` 94) on Ubuntu
-3.10–3.13 and macOS 3.10 and 3.13, a ruff + mypy lint job (including mypy under 3.10 semantics),
-the example runner, and a CLI smoke test. Live tests are collected and skipped.
+3.10–3.13 (required) and macOS 3.10 and 3.13 (best-effort: those jobs use `continue-on-error` because
+macOS runners are often unavailable and would otherwise keep the badge red), a ruff + mypy lint job
+(including mypy under 3.10 semantics), the example runner, and a CLI smoke test. Live tests are
+collected and skipped.
 
 ## Live vs mocked
 
