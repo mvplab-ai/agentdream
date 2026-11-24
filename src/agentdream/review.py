@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .adapters import get_adapter
+from .adapters.stancelog import strip_prefix
 from .context import DreamConfig
 from .jobs import DreamJob
 from .models import Operation
@@ -111,13 +112,13 @@ def accept(job: DreamJob | str, only=None, exclude=None, to: str | os.PathLike |
     original = job.snapshot()
     final = materialize(original, selected, make_redactor(cfg))
 
-    src = Path(str(cfg.memory))
-    target = Path(to) if to else src
+    src = Path(strip_prefix(str(cfg.memory)))
+    target = Path(strip_prefix(to)) if to else src
     if not src.exists():
         raise ReviewError(f"original memory store {src} no longer exists (needed as layout template)")
     if not force and job.input_hash and hash_path(src) != job.input_hash:
         raise ReviewError(f"memory store {src} changed since the dream ran; re-run the dream or use force")
-    adapter = get_adapter(str(src), cfg.memory_format)
+    adapter = get_adapter(str(cfg.memory), cfg.memory_format)  # keeps a stancelog: prefix
 
     backup_path: str | None = None
     if target.exists() and backup:
@@ -125,6 +126,9 @@ def accept(job: DreamJob | str, only=None, exclude=None, to: str | os.PathLike |
         bdir.mkdir(parents=True, exist_ok=True)
         dest = bdir / target.name
         copy_path(target, dest)
+        for side in adapter.sidecars(target):
+            if side.is_file():
+                copy_path(side, bdir / side.name)
         backup_path = str(dest)
 
     # write next to the target, then swap in atomically-ish (rename)
@@ -137,6 +141,8 @@ def accept(job: DreamJob | str, only=None, exclude=None, to: str | os.PathLike |
     adapter.write(final, tmp)
     if target.exists():
         os.replace(target, old) if target.is_file() else target.rename(old)
+    for side in adapter.sidecars(target):
+        remove_path(side)
     os.replace(tmp, target) if tmp.is_file() else tmp.rename(target)
     remove_path(old)
 

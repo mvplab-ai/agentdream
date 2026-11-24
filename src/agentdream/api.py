@@ -31,7 +31,9 @@ def make_config(memory: str | os.PathLike, sessions=None, backend: str | LLMBack
         if opts.get(k) is not None:
             opts[k] = str(Path(opts[k]).absolute())
     mem = str(memory)
-    if not mem.startswith("stancelog:"):
+    if mem.startswith("stancelog:"):  # the shell doesn't expand ~ after the prefix
+        mem = "stancelog:" + str(Path(mem[len("stancelog:"):]).expanduser().absolute())
+    else:
         mem = str(Path(mem).absolute())
     return DreamConfig(memory=mem, sessions=_sessions_list(sessions), backend=name, **opts)
 

@@ -38,6 +38,14 @@ class MemoryAdapter(ABC):
     @abstractmethod
     def write(self, entries: list[MemoryEntry], dest: str | Path) -> Path: ...
 
+    def sidecars(self, path: str | Path) -> list[Path]:
+        """Extra files that belong to the store at ``path`` (journals, WAL...).
+
+        ``accept`` backs them up and removes them when it swaps a new store in, so
+        stale state from the old store cannot leak into the new one.
+        """
+        return []
+
     def output_path(self, store_dir: str | Path) -> Path:
         """Where to put the new store inside a staging ``store_dir``."""
         d = Path(store_dir)

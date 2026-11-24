@@ -193,7 +193,28 @@ and dreams only over new ones. Results are still staged for review unless you pa
 | Markdown / text folder or single file (`MEMORY.md`, `CLAUDE.md`, `notes/*.md`) | A file with front matter (`---` … `---`, like Claude Code memory files) is **one entry**. Otherwise **one entry per top-level bullet / numbered item** (continuation and nested lines included) and one per free paragraph or code block. Headings become the entry `key`. Ids: `path#n` / `path`. Writing re-renders only changed entries, copies untouched files byte for byte, and puts new insights into the matching section or into `dream-insights.md`. |
 | JSON / JSONL (file or folder) | a list, `{"entries"/"memories": [...]}`, a flat `{"key": "value"}` map, or JSONL lines. Text in `content`/`text`/`memory`/`value`/`note`. Unknown fields round-trip. |
 | SQLite | a table (`memories`/`memory`/`entries`/`notes`, or `table=`) with `id` + a text column. The input is opened read-only, and the output is a backup-API copy with the table rewritten, so other tables survive. |
-| stancelog | optional, `stancelog:<path>`, imported lazily; unavailable when the package isn't installed. |
+| stancelog | optional, see below. |
+
+**stancelog** ([systemagents-ai/stancelog](https://github.com/systemagents-ai/stancelog)) is an optional
+extra: `pip install "agentdream[stancelog]"`. Point agentdream at a database with a `stancelog:` prefix:
+
+```bash
+agentdream dream --memory stancelog:~/.stancelog/memory.db --sessions ./logs
+```
+
+- **load** gives one entry per *current* belief (`Memory.all_current()`), keyed by subject. Each entry's
+  text is the belief text, and its metadata holds `stance`, `polarity`, `confidence`, `valid_from`,
+  `recorded_at` and `source`. Superseded or forgotten beliefs on the same subject (`Memory.history()`)
+  go under `metadata.stancelog_history`. stancelog resolves "don't do A" then "maybe A is better" itself,
+  so only the newer stance is dreamed over. When stancelog filed the two stances under different subjects,
+  agentdream's temporal-contradiction pass merges them.
+- **write** creates a **new** stancelog database by calling `Memory.remember()` once per entry, in order.
+  Each call passes the subject, the surviving belief's polarity and `valid_from`, and the metadata. Text the
+  dream rewrote is otherwise re-extracted by stancelog. The output is a single `.db` file (no journal).
+- Opening a stancelog db writes to it (WAL mode, schema, journal reconcile, lock file), so `load` works on
+  a temporary copy and the input database is never touched. `accept` backs up the old db's
+  `.journal.jsonl`, `-wal` and `-shm` sidecars and then removes them. Otherwise stancelog would "recover"
+  the old events into the new db.
 
 Third-party adapters use `agentdream.register_adapter(name, cls)` or the `agentdream.adapters`
 entry-point group. Backends work the same way: `register_backend` or `agentdream.backends`.
@@ -262,7 +283,8 @@ since the dream (unless `--force`) and backs up the original into the job direct
 - Redaction is regex-based. It catches common secret formats, not every secret.
 - The scheduler is a foreground polling loop (run it under systemd, launchd, cron or tmux). Cron
   *expressions* are not supported, only intervals, idle time and session counts.
-- The stancelog adapter is duck-typed against stancelog's API and was not tested against a real install.
+- The stancelog adapter rewrites the belief log as one `remember()` per current belief. Closed history
+  is kept only as metadata and is not replayed as events, and event ids and `recorded_at` times are new.
 - Markdown granularity is bullet/paragraph based, so prose-heavy notes become coarse entries.
 
 ## Development

@@ -214,8 +214,9 @@ class DreamJob:
         self.started_at = now_iso()
         self.pid = os.getpid()
         try:
-            self.input_hash = hash_path(self.config.memory) if self.config.memory and \
-                not str(self.config.memory).startswith("stancelog:") else None
+            from .adapters.stancelog import strip_prefix
+
+            self.input_hash = hash_path(strip_prefix(self.config.memory)) if self.config.memory else None
         except OSError:
             self.input_hash = None
         self.save()
