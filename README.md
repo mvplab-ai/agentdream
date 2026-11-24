@@ -32,6 +32,7 @@ agentdream show <job-id>                 # the report: what changed, why, with t
 agentdream accept <job-id>               # apply it (the original is backed up first)
 agentdream accept <job-id> --only correct-2ec6281c,merge-a91fbf3a     # ...or just some operations
 agentdream discard <job-id>              # ...or throw it away
+agentdream restore <job-id>              # undo an accept: put the backup back
 ```
 
 Point it at your own agent: `--memory` takes a markdown folder or file, a JSON/JSONL file or folder, a
@@ -280,21 +281,27 @@ so restarts don't re-dream old sessions. Defaults can live in a `[schedule]` con
   write onto their input path. The test suite hashes every input file before and after, for every adapter.
 * **Dry run by default.** Nothing is applied until `accept` (or an explicit `--apply`); `accept` backs up
   the target first, refuses if the store changed since the dream (unless `--force`), and swaps the new
-  store in by rename.
+  store in by rename; a failure mid-accept puts the original back, and `agentdream restore JOB` undoes a
+  completed accept from its backup.
 * **Secrets are redacted before analysis** and again over every prompt sent to a model and every report
   quote: 30+ patterns covering provider keys (Anthropic, OpenAI, GitHub, AWS, Slack, Stripe, Google,
-  Azure, …), JWTs, private keys, `password=`-style assignments, URL credentials and card numbers, plus a
-  check for long high-entropy tokens.
+  Azure, …), JWTs, private keys, `password=`-style assignments, URL credentials and card numbers, base64
+  blobs that decode to a secret, keys wrapped onto the next line, plus a check for long high-entropy tokens.
+  Job state (`job.json`), `error.log` and the hook log are redacted too.
   Reports list counts per kind, never the secret.
 * **Size limits** (sessions, bytes per transcript, total tokens, chunks per phase) truncate with a notice or
   fail clearly (`--on-limit fail`).
-* **Model output is untrusted**: operations naming unknown or unseen entry ids are dropped, citations must
+* **Model output is untrusted**: entry ids are normalised (`id='MEMORY.md#1'`, quotes, brackets, comma-joined
+  lists, as small local models return them) and resolved only on a unique match; operations naming unknown or
+  unseen entry ids are dropped, citations must
   name a real transcript line (a quote that doesn't match it is replaced by the real text and flagged), and
   corrections without verifiable evidence are downgraded to flags.
 * **Atomic writes** for job state, reports and stores; job status survives crashes (a job whose worker died
   is marked failed).
 
 How each guarantee is enforced and tested: [docs/ARCHITECTURE.md#safety-guarantees](docs/ARCHITECTURE.md#safety-guarantees).
+Edge cases (empty / huge / malformed / hostile inputs, crashes, concurrency, model misbehaviour) and the
+behaviour for each: **[docs/EDGE_CASES.md](docs/EDGE_CASES.md)**.
 
 ## FAQ
 

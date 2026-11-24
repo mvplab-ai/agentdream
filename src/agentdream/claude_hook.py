@@ -90,6 +90,12 @@ class HookLog:
 
     def __call__(self, msg: str) -> None:
         try:
+            from .redact import Redactor
+
+            msg = Redactor().redact(msg)  # hook errors can quote paths, config or note text
+        except Exception:  # pragma: no cover - logging must never break the hook
+            pass
+        try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             if self.path.exists() and self.path.stat().st_size > LOG_MAX_BYTES:
                 os.replace(self.path, self.path.with_name(self.path.name + ".1"))

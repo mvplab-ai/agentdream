@@ -19,12 +19,23 @@ case they are treated as secrets too. Random 24-character tokens score >= 4.0 bi
 about 95% of the time (99% from 32 characters), hex never exceeds 4.0 (16 symbols), and
 camelCase identifiers are excluded by the word-run check; see ``tests/test_redact.py``.
 
+Two extra passes catch secrets in disguise:
+
+* **base64**: a base64 / base64url blob (>= 16 chars) that decodes to readable text in which
+  a known format or a ``key=value`` secret is found is redacted as ``base64_secret``;
+* **wrapped keys**: a key that a mail client or terminal wrapped onto the next line - the
+  following line consists of a single token of key characters - has that continuation
+  redacted too (same kind as the key).
+
 Redacted text is replaced by ``[REDACTED:<kind>]``; :class:`RedactionReport` counts matches
-per kind (the secrets themselves are never stored or reported).
+per kind (the secrets themselves are never stored or reported). Redaction is idempotent:
+redacting already-redacted text changes nothing.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import math
 import re
 from collections import Counter
@@ -98,10 +109,11 @@ PATTERNS: list[tuple[str, re.Pattern[str], int, Validator | None]] = [
     # ADO.NET / ODBC style: Password=...; Pwd=...
     ("connection_string", re.compile(r"(?i)(?:^|[;\s\"'])(?:password|pwd)\s*=\s*([^;\s\"']{3,})"), 1,
      _plausible_secret),
-    # KEY=value / "key": "value" / key: value  (env, JSON, YAML, TOML, CLI flags)
+    # KEY=value / "key": "value" / key: value  (env, JSON, YAML, TOML, CLI flags); also JSON that was
+    # escaped into a string ({\"api_key\": \"...\"})
     ("secret_assignment", re.compile(
-        r"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_.\-]*?(?:" + _KEYWORDS + r")[\"']?\s*(?::|=|:=|=>)\s*[\"']?"
-        r"([^\s\"',;}{\]]{4,})"), 1, _plausible_secret),
+        r"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_.\-]*?(?:" + _KEYWORDS + r")\\?[\"']?\s*(?::|=|:=|=>)\s*\\?[\"']?"
+        r"([^\s\"'\\,;}{\]]{4,})"), 1, _plausible_secret),
     ("secret_flag", re.compile(r"(?i)--(?:[a-z0-9]+-)*(?:password|passwd|token|secret|api-key)[= ]\s*[\"']?"
                                r"([^\s\"']{4,})"), 1, _plausible_secret),
     ("password", re.compile(r"(?i)\b(?:password|passwd|passphrase)\s+(?:is|was|of)\s+[\"'`]?([^\s\"'`,;]{4,})"), 1,
@@ -119,6 +131,13 @@ _NEAR_KEYWORD = re.compile(r"(?i)" + _KW_ANY + r"[^\n]{0,40}$")
 #: keyword *directly* before the token, only separators in between ("token: X", "secret is X")
 _AFTER_KEYWORD = re.compile(r"(?i)" + _KW_ANY + r"[\"']?\s*(?:[:=]|=>|\bis\b|\bwas\b)?\s*[\"'`]?$")
 _WORD_RUN = re.compile(r"[A-Z]?[a-z]{2,}")
+_B64 = re.compile(r"(?<![A-Za-z0-9+/=_\-])[A-Za-z0-9+/_\-]{16,}={0,2}(?![A-Za-z0-9+/=_\-])")
+#: kinds whose value is one unbroken token, so a wrapped continuation line can be recognised
+_WRAPPABLE = ("anthropic_key", "openai_key", "github_token", "gitlab_token", "slack_token", "stripe_key",
+              "google_api_key", "google_oauth", "huggingface_token", "npm_token", "pypi_token", "jwt",
+              "high_entropy", "bearer_token", "secret_assignment", "aws_secret_key", "base64_secret")
+_CONTINUATION = re.compile(r"\[REDACTED:(" + "|".join(_WRAPPABLE) + r")\]([ \t]*\r?\n[ \t]*)"
+                           r"([A-Za-z0-9_\-+/=]{6,})(?=[ \t]*(?:\r?\n|$))")
 
 
 def shannon_entropy(s: str) -> float:
@@ -199,8 +218,11 @@ class Redactor:
             out = self._sub(out, "email", _EMAIL, 0, None)
         if self.cards:
             out = self._sub(out, "credit_card", _CARD, 0, lambda v: _card_like(re.sub(r"\D", "", v)))
+        out = self._base64_pass(out)
         if self.entropy:
             out = self._entropy_pass(out)
+        if "[REDACTED:" in out:
+            out = self._continuation_pass(out)
         return out
 
     __call__ = redact
@@ -220,6 +242,70 @@ class Redactor:
 
         return pat.sub(repl, text)
 
+    # -- disguised secrets
+    @staticmethod
+    def _b64_text(blob: str) -> str | None:
+        """``blob`` decoded as base64 / base64url into readable UTF-8 text, or None."""
+        s = blob.rstrip("=")
+        if len(s) < 16 or len(s) % 4 == 1 or not re.fullmatch(r"[A-Za-z0-9+/_\-]+", s):
+            return None
+        try:
+            raw = base64.b64decode(s.replace("-", "+").replace("_", "/") + "=" * (-len(s) % 4), validate=True)
+            text = raw.decode("utf-8")
+        except (binascii.Error, ValueError):
+            return None
+        if len(text) < 8 or sum(ch.isprintable() or ch in "\n\t" for ch in text) < 0.9 * len(text):
+            return None
+        return text
+
+    def _decoded_secret(self, blob: str) -> bool:
+        """Does the base64 ``blob`` decode to readable text that contains a secret?"""
+        text = self._b64_text(blob)
+        if text is None:
+            return False
+        probe = Redactor(emails=False, entropy=False, cards=False, extra_patterns=None)
+        probe._nested = True
+        return "[REDACTED:" in probe.redact(text)
+
+    def _b64_prose(self, blob: str) -> bool:
+        """Base64 of ordinary prose ("hello world, this is fine"): several words, no secret inside.
+        Such blobs are exempt from the entropy check (a bare encoded password has no spaces)."""
+        text = self._b64_text(blob)
+        if text is None or len(text.split()) < 3:
+            return False
+        letters = sum(ch.isalpha() or ch.isspace() or ch in ".,;:!?'\"-()" for ch in text)
+        return letters >= 0.85 * len(text) and not self._decoded_secret(blob)
+
+    _nested = False
+
+    def _base64_pass(self, text: str) -> str:
+        if self._nested:  # don't recurse into base64-in-base64
+            return text
+
+        def repl(m: re.Match[str]) -> str:
+            blob = m.group(0)
+            if not (re.search(r"[A-Za-z]", blob) and re.search(r"\d|[+/=]", blob)) or not self._decoded_secret(blob):
+                return blob
+            self.report.add("base64_secret")
+            return "[REDACTED:base64_secret]"
+
+        return _B64.sub(repl, text)
+
+    def _continuation_pass(self, text: str) -> str:
+        def repl(m: re.Match[str]) -> str:
+            tok = m.group(3)
+            if "REDACTED" in tok or not re.search(r"\d", tok) or not re.search(r"[A-Za-z]", tok):
+                return m.group(0)
+            self.report.add(m.group(1))
+            return f"[REDACTED:{m.group(1)}]{m.group(2)}[REDACTED:{m.group(1)}]"
+
+        for _ in range(8):  # a key can wrap over several lines
+            new = _CONTINUATION.sub(repl, text)
+            if new == text:
+                break
+            text = new
+        return text
+
     # -- entropy
     def is_high_entropy(self, token: str, context: str = "") -> bool:
         """Would ``token`` be redacted by the entropy check? ``context`` is the text before it on
@@ -236,6 +322,8 @@ class Redactor:
         if not (re.search(r"[A-Z]", tok) and re.search(r"[a-z]", tok) and re.search(r"\d", tok)):
             return False
         if shannon_entropy(tok) < (min(3.5, self.entropy_threshold) if near else self.entropy_threshold):
+            return False
+        if not near and self._b64_prose(tok):
             return False
         # identifiers are almost entirely word-like runs ("getUserV2Handler": ~0.9-1.0 of the letters);
         # random base62 strings score 0.3-0.75 (99th percentile ~0.8 at 24 chars)
@@ -263,4 +351,22 @@ def redact(text: str, emails: bool = False, **options: object) -> str:
     return Redactor(emails=emails, **options).redact(text)  # type: ignore[arg-type]
 
 
-__all__ = ["PATTERNS", "RedactionReport", "Redactor", "luhn_ok", "redact", "shannon_entropy"]
+#: report fields that are local paths / identifiers the tools need verbatim
+_KEEP_KEYS = frozenset({"job_id", "created_at", "memory", "store_path", "out_dir", "backup_path", "applied_to",
+                        "jobs_dir", "out"})
+
+
+def redact_obj(obj: object, red: Redactor, keep: frozenset[str] = _KEEP_KEYS) -> object:
+    """Recursively redact every string (dict keys included) in a JSON-like structure.
+    Values under the top-level-or-nested keys in ``keep`` are left alone."""
+    if isinstance(obj, str):
+        return red.redact(obj)
+    if isinstance(obj, dict):
+        return {(red.redact(k) if isinstance(k, str) else k): (v if k in keep else redact_obj(v, red, keep))
+                for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [redact_obj(v, red, keep) for v in obj]
+    return obj
+
+
+__all__ = ["PATTERNS", "RedactionReport", "Redactor", "luhn_ok", "redact", "redact_obj", "shannon_entropy"]

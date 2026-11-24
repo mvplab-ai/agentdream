@@ -28,6 +28,8 @@ class MemoryAdapter(ABC):
     def __init__(self, path: str | Path, **options: Any):
         self.path = Path(path) if not isinstance(path, Path) else path
         self.options = options
+        #: human-readable notes from loading (invalid encodings, skipped symlinks...); shown in the report
+        self.notices: list[str] = []
 
     @classmethod
     def detect(cls, path: Path) -> bool:  # pragma: no cover - overridden

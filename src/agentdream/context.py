@@ -38,11 +38,18 @@ class DreamConfig:
     min_sessions: int = 1
     max_bytes_per_transcript: int = 2_000_000
     max_total_tokens: int = 400_000
+    #: memory entries are never truncated (that would delete notes on accept): over the limit is an error
+    max_entries: int = 20_000
     on_limit: str = "truncate"  # truncate | fail
     # chunking (LLM backends): token budget per model call, transcript overlap, cap on calls per phase
     max_chunk_tokens: int = 60_000
     chunk_overlap: int = 400
     max_chunks: int = 64
+    # LLM call retries for transient errors (timeouts, HTTP 408/429/5xx): attempts = 1 + llm_retries;
+    # wait = Retry-After if the server sent one, else llm_retry_backoff * 2**attempt; capped at llm_retry_max_wait
+    llm_retries: int = 2
+    llm_retry_backoff: float = 2.0
+    llm_retry_max_wait: float = 60.0
     # redaction
     redact: bool = True
     redact_emails: bool = False
@@ -65,6 +72,24 @@ class DreamConfig:
     def from_dict(cls, d: dict[str, Any]) -> DreamConfig:
         known = set(cls.__dataclass_fields__)
         return cls(**{k: v for k, v in d.items() if k in known})
+
+    def validate(self) -> None:
+        """Reject nonsense limits up front (ValueError) instead of misbehaving later."""
+        positive = ("max_sessions", "max_bytes_per_transcript", "max_total_tokens", "max_entries", "max_chunk_tokens",
+                    "max_chunks")
+        for name in positive:
+            v = getattr(self, name)
+            if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+                raise ValueError(f"{name} must be a positive integer, got {v!r}")
+        for name in ("min_sessions", "chunk_overlap", "llm_retries"):
+            v = getattr(self, name)
+            if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+                raise ValueError(f"{name} must be a non-negative integer, got {v!r}")
+        for name in ("llm_retry_backoff", "llm_retry_max_wait"):
+            if not isinstance(getattr(self, name), (int, float)) or getattr(self, name) < 0:
+                raise ValueError(f"{name} must be >= 0, got {getattr(self, name)!r}")
+        if self.on_limit not in ("truncate", "fail"):
+            raise ValueError(f"on_limit must be 'truncate' or 'fail', got {self.on_limit!r}")
 
 
 @dataclass

@@ -61,14 +61,19 @@ class SQLiteAdapter(MemoryAdapter):
     def load(self) -> list[MemoryEntry]:
         if not self.path.exists():
             raise AdapterError(f"memory store not found: {self.path}")
-        con = _ro_connect(self.path)
+        if not self.path.is_file():
+            raise AdapterError(f"{self.path} is a directory, not a file (a SQLite store is a single .db file)")
         try:
-            table, cols, text_col = self._resolve_table(con)
-            con.row_factory = sqlite3.Row
-            order = "rowid" if "rowid" not in cols else "id"
-            rows = con.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
-        finally:
-            con.close()
+            con = _ro_connect(self.path)
+            try:
+                table, cols, text_col = self._resolve_table(con)
+                con.row_factory = sqlite3.Row
+                order = "rowid" if "rowid" not in cols else "id"
+                rows = con.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
+            finally:
+                con.close()
+        except sqlite3.DatabaseError as exc:
+            raise AdapterError(f"{self.path}: not a readable SQLite database ({exc})") from exc
         entries = []
         for i, r in enumerate(rows):
             d = dict(r)

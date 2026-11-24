@@ -57,3 +57,13 @@ def final_contents(job):
     from agentdream import get_adapter
 
     return [e.content for e in get_adapter(job.store_path).load()]
+
+
+def pytest_collection_modifyitems(config, items):
+    """Everything under tests/edge carries the ``edge`` marker (area = module name minus ``test_``),
+    so ``pytest -m edge`` runs the edge-case suite and scripts/edge_case_table.py can group it."""
+    edge_dir = Path(__file__).resolve().parent / "edge"
+    for item in items:
+        path = Path(str(item.fspath)).resolve()
+        if edge_dir in path.parents:
+            item.add_marker(pytest.mark.edge(area=path.stem.removeprefix("test_")))

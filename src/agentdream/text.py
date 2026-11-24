@@ -72,12 +72,17 @@ INTENT_MARKERS = re.compile(
 _CACHE = 1 << 16
 
 
+#: invisible characters that must not split or hide words: zero-width space / (non-)joiners, word joiner,
+#: BOM / zero-width no-break space, soft hyphen, Mongolian vowel separator
+_INVISIBLE = dict.fromkeys([0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD, 0x180E])
+
+
 @lru_cache(maxsize=_CACHE)
 def fold(text: str) -> str:
-    """Lowercase + strip accents (PokéCenter -> pokecenter) + normalise quotes."""
+    """Lowercase + strip accents (PokéCenter -> pokecenter) + normalise quotes + drop zero-width chars."""
     if text.isascii():
         return text.lower()
-    t = unicodedata.normalize("NFKD", text)
+    t = unicodedata.normalize("NFKD", text.translate(_INVISIBLE))
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
     t = t.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     return t.lower()

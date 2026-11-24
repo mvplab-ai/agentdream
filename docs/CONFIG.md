@@ -39,10 +39,14 @@ max_sessions = 100            # keep the most recent N sessions
 min_sessions = 1
 max_bytes_per_transcript = 2000000
 max_total_tokens = 400000     # estimated tokens of memory + transcripts
+max_entries = 20000           # memory entries; never truncated - over the limit is always an error
 on_limit = "truncate"         # or "fail"
 max_chunk_tokens = 60000      # LLM backends: token budget per call
 chunk_overlap = 400           # transcript tokens repeated between consecutive chunks of a session
 max_chunks = 64               # max model calls per phase
+llm_retries = 2               # retries for timeouts / HTTP 408, 429, 5xx (0 disables)
+llm_retry_backoff = 2.0       # seconds; doubles per retry unless the server sends Retry-After
+llm_retry_max_wait = 60.0     # cap on any single wait (also caps Retry-After)
 insight_min_sessions = 2      # deterministic insights: sessions a pattern must appear in
 max_insights = 12
 

@@ -216,16 +216,24 @@ stateDiagram-v2
         partially_accepted --> accepted: forced accept with all operations
         partially_accepted --> partially_accepted: forced accept with a subset
         accepted --> accepted: forced accept again
+        accepted --> restored: restore from the backup
+        partially_accepted --> restored: restore from the backup
+        restored --> accepted: accept again
         discarded --> [*]
     }
 ```
 
 * `status` (`pending | running | completed | failed | canceled`) and `review`
-  (`pending | accepted | partially_accepted | discarded`) are separate fields of `job.json`.
+  (`pending | accepted | partially_accepted | discarded | restored`) are separate fields of `job.json`.
+* Only a `completed` job serves its report (`job.report`, `agentdream show`) or can be accepted: a failed
+  or killed job may have left a partial report on disk, which is never presented as a result.
+* Job ids are single path components (`[A-Za-z0-9][A-Za-z0-9._-]*`, no `..`); anything else is rejected
+  before touching the filesystem, and a job dir that resolves outside the jobs dir is refused. A new job
+  claims its directory exclusively, so two jobs created in the same second never share one.
 * A job left `running`/`pending` by a process that no longer exists is marked `failed` the next time
   it is loaded (`DreamJob.load` checks the recorded pid).
 * `discard` on an unfinished job cancels it first; a discarded job can't be accepted; an accepted job
-  can't be discarded (restore from its backup instead).
+  can't be discarded (`agentdream restore JOB` puts its backup back instead).
 
 ## Module map
 
@@ -234,7 +242,7 @@ stateDiagram-v2
 | `__init__.py` | Public API re-exports (`dream`, `accept`, `DreamJob`, `Pipeline`, registries, models, ...). |
 | `__main__.py` | `python -m agentdream` → `cli.main`. |
 | `api.py` | `dream()` / `dream_async()` / `make_config()`: build a `DreamConfig`, run a `DreamJob`, optional apply. |
-| `cli.py` | argparse CLI: `dream`, `status`, `list`, `show`, `accept`, `discard`, `cancel`, `schedule`, `serve-mcp`, `config`, `hook`, `install-claude-hook`, `uninstall-claude-hook`. |
+| `cli.py` | argparse CLI: `dream`, `status`, `list`, `show`, `accept`, `discard`, `restore`, `cancel`, `schedule`, `serve-mcp`, `config`, `hook`, `install-claude-hook`, `uninstall-claude-hook`. |
 | `config.py` | Config discovery (`.agentdream.toml`, `[tool.agentdream]`, user file), env vars, type coercion, precedence, source tracking. |
 | `_toml.py` | `tomllib` → `tomli` → built-in TOML-subset parser (Python 3.10 without extras). |
 | `context.py` | `DreamConfig` (all options), `DreamContext` (state shared by phases), `DreamCanceled`, `DreamLimitError`, sentence index. |
@@ -258,7 +266,7 @@ stateDiagram-v2
 | `backends/builtin.py` | `deterministic`, `anthropic`, `openai` (compatible), `claude-cli`. |
 | `backends/__init__.py` | Backend registry, aliases (`ollama`, `lmstudio`, ...), `agentdream.backends` entry points. |
 | `jobs.py` | `DreamJob`: statuses, background thread, cancel (in-process and via `job.json`), persisted state, results. |
-| `review.py` | `accept` (all / `only` / `exclude` with dependency closure, backup, atomic swap), `discard`. |
+| `review.py` | `accept` (all / `only` / `exclude` with dependency closure, backup, lock, atomic swap with rollback), `discard`, `restore`. |
 | `report.py` | Report sections and counts, markdown rendering, unified diff (per file for text stores). |
 | `scheduler.py` | Idle / interval / every-N-sessions triggers with persisted state and injectable clock. |
 | `claude_hook.py` | Claude Code hook: stdin payload, gating, locks, detached worker, settings.json installer. |
@@ -405,13 +413,22 @@ depends on the input and the budget.
 2. `select_operations`: `only` pulls in the operations it depends on, `exclude` also drops operations that
    depend on an excluded one — the selection is always self-consistent (warnings say what was added or
    dropped); ids may be given as unique prefixes;
-3. refuses if the input store's content hash differs from the one recorded when the dream started
-   (`force` overrides);
-4. re-materialises the final entries from `snapshot.json` + the selected operations;
-5. copies the target (and adapter sidecars such as SQLite `-wal` / `-journal`) into
+3. refuses an explicitly empty `only`, unknown or ambiguous ids (ambiguous prefixes list the candidates),
+   a target of the other kind (a file where the store is a folder, or vice versa), and a selection that
+   leaves nothing to apply (use `discard` for that);
+4. takes a lock for the target (in `jobs/.locks/`), so concurrent accepts onto one store are serialised,
+   then refuses if the input store's content hash differs from the one recorded when the dream started
+   (`force` overrides) - the second of two racing accepts therefore sees the store changed;
+5. re-materialises the final entries from `snapshot.json` + the selected operations;
+6. copies the target (and adapter sidecars such as SQLite `-wal` / `-journal`) into
    `jobs/<id>/backups/<timestamp>/`;
-6. writes the new store to `.NAME.agentdream-new` next to the target, renames the target to
-   `.NAME.agentdream-old`, renames the new one into place and removes the old one.
+7. writes the new store to `.NAME.agentdream-new` next to the target, renames the target to
+   `.NAME.agentdream-old`, renames the new one into place and removes the old one. If anything fails on
+   the way, the original (and its sidecars) is moved back and the half-written copy removed; the error
+   (`ReviewError`) says the original is intact and where the backup is.
+
+`restore(job, to=None)` / `agentdream restore JOB [--to DIR]` puts the backup back with the same swap and
+marks the job `restored`; the store then matches the dream's input again, so it can be re-accepted.
 
 `discard(job)` deletes the staged store and marks the job `discarded` (cancelling it if still running).
 
@@ -520,7 +537,8 @@ class KeywordModel(LLMBackend):
     name = "keyword"
 
     def complete(self, system, prompt, json_schema=None):
-        ids = re.findall(r"^- id='([^']+)'.*\n  .*deploy", prompt, re.M | re.I)
+        memory = prompt.split("## Session transcripts")[0]  # entries render as "[MEMORY.md#7] text"
+        ids = re.findall(r"^\[([^\]]+)\] .*deploy", memory, re.M | re.I)
         ops = [{"type": "contradiction", "kind": "conflict", "targets": [i], "summary": "check deploy note"}
                for i in ids if "Task: VERIFY" in prompt]
         return json.dumps({"operations": ops})
@@ -624,12 +642,19 @@ per phase; chunking adds overlap and per-call scaffolding (~700–750 tokens eac
 | Memory path missing / format unknown | Job `failed` with `AdapterError`; nothing written. |
 | No transcripts / all empty | Job `failed` ("need at least 1 session"). |
 | Too many / too large sessions | Truncated with a notice, or `failed` with `on_limit="fail"`. |
-| Backend unreachable, HTTP error, timeout | Warning; deterministic heuristics run for that phase. |
+| Timeout, HTTP 408 / 429 / 5xx | Retried `llm_retries` times (default 2) with exponential back-off from `llm_retry_backoff` (default 2s); `Retry-After` is honoured; waits are capped by `llm_retry_max_wait` (60s). Then the row below. |
+| Backend unreachable, other HTTP error, claude-cli failure | Warning; deterministic heuristics run for that phase. |
 | Model returns prose / broken JSON | JSON repair; if still unusable, same as above. |
+| Model mangles ids (`id='MEMORY.md#1'`, quotes, brackets, `"a, b"` as one string) | Normalised; resolved only on a unique match (exact, case-insensitive, file basename). |
 | Model invents ids or citations | Those operations / evidence items are dropped, with warnings. |
 | Some chunks fail | Valid chunk results kept; heuristics fill in; warning names the failed parts. |
 | `max_chunk_tokens` too small for the scaffolding | Job `failed` with a message giving the minimum. |
 | Store changed between dream and accept | `accept` refuses (`--force` to override). |
 | Worker process killed mid-dream | Job marked `failed` on next load; partial staged output is ignored. |
+| Crash during `accept` | Original store restored (or never moved); `ReviewError` names the backup. |
+| `--out` overlapping the memory store | Job `failed` before anything is written. |
+| Read-only / unwritable output, jobs or target dir | One-line error (`agentdream: error: Permission denied: PATH`), input untouched. |
+
+Every row above, and many more, is a test in `tests/edge/`; see [EDGE_CASES.md](EDGE_CASES.md).
 | Hook can't write its state dir | Error printed to stderr, exit 0; Claude Code is unaffected. |
 | Two dreams for one project at once (hook) | The second worker sees the lock and exits. |

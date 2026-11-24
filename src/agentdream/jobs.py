@@ -8,8 +8,10 @@ Review state (separate): pending | accepted | partially_accepted | discarded.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -43,6 +45,14 @@ def _new_id() -> str:
     return time.strftime("dream-%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(3)
 
 
+#: job ids are single path components: letters, digits, '.', '_', '-'; no '..', separators, globs or NUL
+_JOB_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,127}$")
+
+
+def valid_job_id(job_id: object) -> bool:
+    return isinstance(job_id, str) and bool(_JOB_ID.match(job_id)) and ".." not in job_id
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -64,8 +74,12 @@ class JobNotFound(Exception):
 class DreamJob:
     def __init__(self, config: DreamConfig, job_id: str | None = None, jobs_dir: str | os.PathLike[str] | None = None,
                  pipeline: Pipeline | None = None, backend: LLMBackend | None = None):
+        if job_id is not None and not valid_job_id(job_id):
+            raise ValueError(f"invalid job id {job_id!r}")
         self.config = config
         self.id = job_id or _new_id()
+        #: an auto-generated id is only final once its directory was created exclusively (see save)
+        self._reserved = job_id is not None
         self.jobs_dir = Path(jobs_dir or config.jobs_dir or default_jobs_dir())
         self.status = "pending"
         self.review = "pending"
@@ -112,8 +126,19 @@ class DreamJob:
             "input_hash": self.input_hash, "out_dir": str(self.out_dir), "store_path": self.store_path,
             "accepted_ops": self.accepted_ops, "applied_to": self.applied_to, "backup_path": self.backup_path,
             "pid": self.pid, "cancel_requested": self._cancel.is_set() or self._file_cancel_flag(),
-            "config": self.config.to_dict(),
+            "config": self._shown_config(),
         }
+
+    def _shown_config(self) -> dict[str, Any]:
+        """The config as persisted: free text and session paths (which may hold secrets, e.g. a token in a
+        file name) are redacted; the memory path / formats that accept needs are kept verbatim."""
+        d = self.config.to_dict()
+        if self.config.redact:
+            red = self._redactor()
+            if d.get("instructions"):
+                d["instructions"] = red.redact(d["instructions"])
+            d["sessions"] = [red.redact(str(s)) for s in d.get("sessions") or []]
+        return d
 
     def _file_cancel_flag(self) -> bool:
         try:
@@ -121,22 +146,66 @@ class DreamJob:
         except (OSError, ValueError):
             return False
 
+    def _reserve(self) -> None:
+        """Create the job dir exclusively. Two jobs created in the same second with the same random
+        suffix would otherwise share (and corrupt) one directory: on a clash, pick a new id."""
+        self.jobs_dir.mkdir(parents=True, exist_ok=True)
+        for _ in range(100):
+            try:
+                self.dir.mkdir()
+            except FileExistsError:
+                default_out = self.out_dir == self.dir / "output"
+                self.id = f"{_new_id()}-{secrets.token_hex(2)}"
+                if default_out:
+                    self.out_dir = self.dir / "output"
+                continue
+            self._reserved = True
+            return
+        raise RuntimeError("could not allocate a unique job id")  # pragma: no cover
+
     def save(self) -> None:
         with self._lock:
+            if not self._reserved:
+                self._reserve()
             self.dir.mkdir(parents=True, exist_ok=True)
             atomic_write_json(self.path, self.to_dict())
 
+    def _redactor(self) -> Any:
+        from .pipeline import make_redactor
+
+        return make_redactor(self.config)
+
+    def _redacted(self, text: str | None) -> str | None:
+        """Job state and logs never echo secrets (exception messages can quote note text)."""
+        if not text or not self.config.redact:
+            return text
+        return self._redactor().redact(text)
+
     @classmethod
     def load(cls, job_id: str, jobs_dir: str | os.PathLike[str] | None = None) -> DreamJob:
+        if not valid_job_id(job_id):
+            raise JobNotFound(f"invalid job id {job_id!r} (ids look like dream-20260101-120000-abc123)")
         jd = Path(jobs_dir or default_jobs_dir())
         p = jd / job_id / "job.json"
         if not p.exists():
-            matches = sorted(d.name for d in jd.glob(f"{job_id}*") if (d / "job.json").exists()) if jd.exists() else []
+            matches = sorted(d.name for d in jd.iterdir() if d.name.startswith(job_id) and (d / "job.json").exists()) \
+                if jd.is_dir() else []
             if len(matches) == 1:
                 p = jd / matches[0] / "job.json"
             else:
                 raise JobNotFound(f"no such dream job: {job_id}" + (f" (ambiguous: {matches})" if matches else ""))
-        d = json.loads(p.read_text(encoding="utf-8"))
+        try:
+            inside = jd.resolve() in p.parent.resolve().parents
+        except OSError:  # pragma: no cover
+            inside = False
+        if not inside:
+            raise JobNotFound(f"job {job_id}: its directory resolves outside the jobs dir {jd}; refusing to use it")
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if not isinstance(d, dict) or "id" not in d:
+                raise ValueError("not a job object")
+        except (OSError, ValueError) as exc:
+            raise JobNotFound(f"job {job_id}: job.json is unreadable or corrupt ({exc})") from exc
         job = cls(DreamConfig.from_dict(d.get("config") or {}), job_id=d["id"], jobs_dir=jd)
         for k in ("status", "review", "created_at", "created_ns", "started_at", "finished_at", "progress", "phase",
                   "error", "warnings", "counts", "input_hash", "store_path", "accepted_ops", "applied_to",
@@ -164,7 +233,7 @@ class DreamJob:
             if (d / "job.json").exists():
                 try:
                     out.append(cls.load(d.name, jd))
-                except (ValueError, KeyError, OSError):
+                except (JobNotFound, ValueError, KeyError, TypeError, OSError):
                     continue
         out.sort(key=lambda j: (j.created_at, j.created_ns or 0, j.id))
         return out
@@ -260,11 +329,12 @@ class DreamJob:
             self.error = "canceled by user"
         except Exception as exc:
             self.status = "failed"
-            self.error = f"{type(exc).__name__}: {exc}"
-            (self.dir / "error.log").parent.mkdir(parents=True, exist_ok=True)
-            (self.dir / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
+            self.store_path = None
+            self.error = self._redacted(f"{type(exc).__name__}: {exc}")
+            with contextlib.suppress(OSError):  # an unwritable job dir must not mask the real error
+                (self.dir / "error.log").write_text(self._redacted(traceback.format_exc()) or "", encoding="utf-8")
         else:
-            self.warnings = list(ctx.warnings)
+            self.warnings = [self._redacted(w) or "" for w in ctx.warnings]
             self.counts = dict(ctx.stats.get("report", {}).get("counts", {}))
             self.store_path = str(ctx.store_path) if ctx.store_path else None
             atomic_write_json(self.dir / "snapshot.json", [e.to_dict() for e in ctx.original_entries])
@@ -277,19 +347,23 @@ class DreamJob:
         return self
 
     # ---------------------------------------------------------------- results
-    @property
-    def report(self) -> dict[str, Any]:
-        p = self.out_dir / "report.json"
+    def _report_file(self, name: str) -> Path:
+        # a failed / killed job may have left a partial report on disk: never present it as a result
+        if self.status != "completed":
+            raise FileNotFoundError(f"job {self.id} is {self.status}; it has no complete report"
+                                    + (f" ({self.error})" if self.error else ""))
+        p = self.out_dir / name
         if not p.exists():
             raise FileNotFoundError(f"job {self.id} has no report (status={self.status}, review={self.review})")
-        return json.loads(p.read_text(encoding="utf-8"))
+        return p
+
+    @property
+    def report(self) -> dict[str, Any]:
+        return json.loads(self._report_file("report.json").read_text(encoding="utf-8"))
 
     @property
     def report_md(self) -> str:
-        p = self.out_dir / "report.md"
-        if not p.exists():
-            raise FileNotFoundError(f"job {self.id} has no report (status={self.status}, review={self.review})")
-        return p.read_text(encoding="utf-8")
+        return self._report_file("report.md").read_text(encoding="utf-8")
 
     @property
     def operations(self) -> List[Operation]:

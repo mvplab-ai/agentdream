@@ -11,6 +11,7 @@ import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 from .adapters import get_adapter
 from .backends import LLMBackend, get_backend
@@ -18,7 +19,7 @@ from .context import DreamCanceled, DreamConfig, DreamContext, DreamLimitError
 from .engine import run_analysis_phase
 from .loaders import load_transcripts
 from .models import MemoryEntry, Operation, apply_operations
-from .redact import Redactor
+from .redact import Redactor, redact_obj
 from .report import build_report, render_markdown, store_diff
 from .text import token_set
 from .util import atomic_write_json, atomic_write_text, estimate_tokens, now_iso
@@ -28,12 +29,35 @@ Phase = Callable[[DreamContext], None]
 
 # ----------------------------------------------------------------- phases
 
+def _check_output_location(ctx: DreamContext) -> None:
+    """The staging dir must not overlap the input store: writing into the store would mutate the
+    input, and an ``--out`` whose ``store/`` *is* the input would be deleted by the staging write."""
+    if ctx.output_dir is None or not ctx.config.memory or str(ctx.config.memory).startswith("stancelog:"):
+        return
+    try:
+        mem = Path(str(ctx.config.memory)).resolve()
+        out = ctx.output_dir.resolve()
+    except OSError:  # pragma: no cover - unresolvable paths fail later with a clearer error
+        return
+    staged = out / "store"
+    if out == mem or mem in out.parents or staged == mem or staged in mem.parents:
+        raise ValueError(f"output directory {ctx.output_dir} overlaps the memory store {ctx.config.memory}; "
+                         "choose an --out outside the store")
+
+
 def phase_load(ctx: DreamContext) -> None:
     cfg = ctx.config
     if not cfg.memory:
         raise ValueError("no memory store given")
+    cfg.validate()
+    _check_output_location(ctx)
     ctx.adapter = get_adapter(cfg.memory, cfg.memory_format)
     ctx.original_entries = ctx.adapter.load()
+    ctx.notices.extend(getattr(ctx.adapter, "notices", None) or [])
+    if len(ctx.original_entries) > cfg.max_entries:
+        raise DreamLimitError(f"{len(ctx.original_entries)} entries exceed max_entries={cfg.max_entries} (memory "
+                              "entries are never truncated, since that would delete notes on accept; raise "
+                              "max_entries or split the store)")
     transcripts, notices = load_transcripts(cfg.sessions, cfg.transcript_format, max_sessions=None,
                                             min_sessions=cfg.min_sessions)
     ctx.transcripts = transcripts
@@ -86,6 +110,19 @@ def phase_limits(ctx: DreamContext) -> None:
                 break
             kept.append(m)
             total += b
+        if not kept:
+            # the newest message alone is over the limit: keep its beginning rather than emptying the session
+            last = t.messages[-1]
+            marker = " …[truncated]"
+            room = max(0, cfg.max_bytes_per_transcript - len(marker.encode("utf-8")))
+            head = last.content.encode("utf-8")[:room].decode("utf-8", errors="ignore")
+            last.content = head + marker if room else marker.strip()[:cfg.max_bytes_per_transcript]
+            dropped = len(t.messages) - 1
+            t.messages = [last]
+            t.metadata["truncated_messages"] = dropped
+            ctx.notices.append(msg + f"; its newest message alone is larger, so it was cut to fit ({dropped} older "
+                                     "message(s) dropped)")
+            continue
         dropped = len(t.messages) - len(kept)
         t.messages = list(reversed(kept))
         t.metadata["truncated_messages"] = dropped
@@ -224,6 +261,15 @@ def phase_write(ctx: DreamContext) -> None:
         backend=ctx.backend.describe() if ctx.backend else "deterministic", store_path=str(store_path),
         created_at=ctx.stats.get("created_at", now_iso()),
     )
+    if ctx.config.redact:
+        # last line of defence: every string in the report (entry keys and metadata in upserts, session
+        # paths and ids, warnings, notices...) goes through the redactor before it is written
+        diff_text = report.pop("diff")
+        report = cast(dict[str, Any], redact_obj(report, red))
+        report["diff"] = diff_text
+        for k, v in red.report.counts.items():
+            report["redactions"][k] = report["redactions"].get(k, 0) + v
+        red.report.counts.clear()
     ctx.stats["report"] = report
     atomic_write_json(out / "report.json", report)
     atomic_write_text(out / "report.md", render_markdown(report, ctx.ops))
@@ -242,6 +288,8 @@ def _sanitize_report_text(ctx: DreamContext, red: Redactor) -> None:
         op.history = [red.redact(x) for x in op.history]
         for ev in op.evidence:
             ev.quote = red.redact(ev.quote)
+            ev.citation = red.redact(ev.citation)  # a secret in a transcript *filename*
+            ev.source_path = red.redact(ev.source_path) if ev.source_path else ev.source_path
     for k, v in red.report.counts.items():  # count anything the second pass caught
         ctx.redaction_counts[k] = ctx.redaction_counts.get(k, 0) + v
     red.report.counts.clear()

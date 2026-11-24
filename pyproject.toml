@@ -31,7 +31,7 @@ dependencies = []
 # All built-in LLM backends use urllib / subprocess, so no SDK extra is needed.
 # The stancelog adapter is optional and imported lazily: pip install "agentdream[stancelog]".
 stancelog = ["stancelog @ git+https://github.com/systemagents-ai/stancelog"]
-dev = ["pytest>=7", "pytest-cov>=4", "coverage[toml]>=7", "ruff>=0.6", "mypy>=1.10"]
+dev = ["pytest>=7", "pytest-cov>=4", "coverage[toml]>=7", "ruff>=0.6", "mypy>=1.10", "hypothesis>=6.100"]
 
 [tool.hatch.metadata]
 allow-direct-references = true  # needed for the git URL in the stancelog extra
@@ -47,12 +47,13 @@ Issues = "https://github.com/systemagents-ai/agentdream/issues"
 packages = ["src/agentdream"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/agentdream", "tests", "examples", "docs", "README.md", "LICENSE", "CONTRIBUTING.md", "SPEC.md"]
+include = ["src/agentdream", "tests", "examples", "docs", "scripts", "README.md", "LICENSE", "CONTRIBUTING.md", "SPEC.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "live: hits a real model (claude-cli); skipped unless AGENTDREAM_LIVE=1",
+    "edge(area): edge-case suite under tests/edge (applied automatically; see docs/EDGE_CASES.md)",
 ]
 
 [tool.coverage.run]
@@ -91,7 +92,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["agentdream"]
-known-local-folder = ["conftest", "synth"]
+known-local-folder = ["conftest", "synth", "edgekit"]
 
 [tool.mypy]
 python_version = "3.10"

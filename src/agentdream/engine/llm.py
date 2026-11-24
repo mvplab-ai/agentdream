@@ -11,6 +11,8 @@ from __future__ import annotations
 import ast
 import json
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,8 +31,12 @@ from ..text import fold, jaccard, shorten, token_set
 from ..util import estimate_tokens
 
 SYSTEM_PROMPT = """You are agentdream, a careful memory-consolidation engine for an AI agent ("dreaming").
-You receive the agent's current memory store (entries with ids) and, for some tasks, session transcripts in which
-every message is prefixed with a citation like [path/to/session.jsonl:42].
+You receive the agent's current memory store and, for some tasks, session transcripts. Each memory entry starts with
+its id in square brackets, e.g. [MEMORY.md#1] or [notes/project.md#3]. Every transcript message starts with a
+citation in square brackets, e.g. [path/to/session.jsonl:42].
+
+In "targets", give entry ids copied verbatim from inside the square brackets - for [MEMORY.md#1] write "MEMORY.md#1"
+(no brackets, no quotes inside the string, no "id=" prefix), one id per list item.
 
 Your job is to propose a small set of high-value, reviewable operations on the memory store:
 - merge: entries that say the same thing. targets = all duplicate ids, FIRST id is kept; new_content = best wording.
@@ -46,7 +52,7 @@ Rules:
 - Never invent ids or citations. Prefer fewer, correct operations over many speculative ones.
 - Keep notes concise, self-contained and in the store's existing style.
 - Output ONLY a JSON object, no prose, matching:
-{"operations": [{"type": "merge|replace|correct|insight|contradiction", "targets": ["id", ...],
+{"operations": [{"type": "merge|replace|correct|insight|contradiction", "targets": ["MEMORY.md#1", ...],
   "new_content": "string or null", "kind": "temporal|conflict|null", "summary": "one line",
   "reason": "why", "confidence": 0.0-1.0, "evidence": [{"citation": "path:line", "quote": "verbatim text"}]}]}
 If nothing needs to change, return {"operations": []}."""
@@ -126,10 +132,14 @@ def _balanced(text: str) -> str | None:
     return text[start:] + "".join(reversed(stack)) if stack and not in_str else None
 
 
-def parse_json_loose(text: str) -> Any:
+def parse_json_loose(text: Any) -> Any:
     """Parse model output into JSON, repairing common problems. Raises ValueError."""
+    if isinstance(text, (bytes, bytearray)):
+        text = bytes(text).decode("utf-8", errors="replace")
     if text is None:
         raise ValueError("empty model output")
+    if not isinstance(text, str):
+        raise ValueError(f"model output is {type(text).__name__}, not text")
     candidates = []
     t = text.strip()
     candidates.append(t)
@@ -145,7 +155,7 @@ def parse_json_loose(text: str) -> Any:
     for c in candidates:
         try:
             return json.loads(c)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
     for c in candidates:
         try:
@@ -159,6 +169,12 @@ def parse_json_loose(text: str) -> Any:
 
 
 def extract_operations(data: Any) -> list[dict[str, Any]]:
+    return split_operations(data)[0]
+
+
+def split_operations(data: Any) -> tuple[list[dict[str, Any]], int]:
+    """(operation objects, number of non-object items dropped). Raises ValueError when there is no
+    operations list at all, or when every item in it is junk (``[1, 2, 3]``)."""
     items: Any
     if isinstance(data, list):
         items = data
@@ -170,7 +186,10 @@ def extract_operations(data: Any) -> list[dict[str, Any]]:
         items = None
     if not isinstance(items, list):
         raise ValueError("model output has no 'operations' list")
-    return [i for i in items if isinstance(i, dict)]
+    ops = [i for i in items if isinstance(i, dict)]
+    if items and not ops:
+        raise ValueError(f"model output's operations list has no objects ({shorten(repr(items), 80)})")
+    return ops, len(items) - len(ops)
 
 
 # ------------------------------------------------------------------ prompt rendering
@@ -180,18 +199,145 @@ MAX_MESSAGE_CHARS = 8000
 
 
 def render_memory(entries: list[MemoryEntry]) -> str:
+    """One block per entry: ``[<id>] <content>`` (continuation lines indented), then an indented
+    ``(...)`` metadata line. The bare bracketed id is what even small models copy back correctly;
+    an ``id='...'`` rendering was echoed verbatim (``"id='MEMORY.md#1'"``) by qwen2.5:1.5b."""
     lines = []
     for e in entries:
         when = e.updated_at or e.created_at
-        meta = f" path={e.path}" if e.path else ""
-        meta += f" section={e.key!r}" if e.key else ""
-        meta += f" updated={when}" if when else ""
-        meta += f" order={e.metadata.get('_order')}" if "_order" in e.metadata else ""
+        meta = []
+        if e.path and not e.id.startswith(e.path):
+            meta.append(f"file: {e.path}")
+        if e.key:
+            meta.append(f"section: {e.key}")
+        if when:
+            meta.append(f"updated: {when}")
+        if "_order" in e.metadata:
+            meta.append(f"order: {e.metadata.get('_order')}")
         part = e.metadata.get("_part")
         if part:
-            meta += f" EXCERPT {part[0]}/{part[1]} of a long entry (read-only: do not propose new_content for it)"
-        lines.append(f"- id={e.id!r}{meta}\n  {e.content.replace(chr(10), chr(10) + '  ')}")
+            meta.append(f"EXCERPT {part[0]}/{part[1]} of a long entry (read-only: do not propose new_content for it)")
+        body = e.content.replace("\n", "\n    ")
+        lines.append(f"[{e.id}] {body}" + (f"\n    ({'; '.join(meta)})" if meta else ""))
     return "\n".join(lines) or "(empty store)"
+
+
+# ------------------------------------------------------------------ entry id normalisation
+
+_ID_PREFIX = re.compile(r"^(?:entry[_ ]?)?id\s*[:=]\s*", re.I)
+_WRAP_PAIRS = (("[", "]"), ("(", ")"), ("<", ">"), ("{", "}"))
+_ID_SPLIT = re.compile(r"\s*[,;]\s*|\s+and\s+|\s*\n\s*", re.I)
+
+
+def normalize_entry_id(raw: Any) -> str:
+    """Peel what models wrap around an entry id: whitespace, repeated ``id=`` / ``id:`` prefixes,
+    quotes and backticks, brackets, trailing commas. ``"id='id='MEMORY.md#6'"`` -> ``MEMORY.md#6``;
+    ``"[MEMORY.md#6] The API..."`` -> ``MEMORY.md#6``. Repeats until nothing changes."""
+    s = str(raw)
+    for _ in range(12):
+        before = s
+        s = s.strip().rstrip(",;").strip()
+        s = s.strip("'\"`‘’“”")
+        s = _ID_PREFIX.sub("", s)
+        for a, b in _WRAP_PAIRS:
+            if s.startswith(a) and s.endswith(b):
+                s = s[1:-1]
+            elif s.startswith(a) and b in s:  # "[MEMORY.md#6] copied text..."
+                s = s[1:s.index(b)]
+        if s == before:
+            break
+    return s.strip()
+
+
+def _flatten_targets(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        out: list[str] = []
+        for x in raw:
+            out.extend(_flatten_targets(x))
+        return out
+    if isinstance(raw, dict):  # {"id": "..."} objects
+        inner = raw.get("id") or raw.get("target") or raw.get("entry")
+        return _flatten_targets(inner) if inner is not None else [json.dumps(raw, ensure_ascii=False, default=str)]
+    if isinstance(raw, float) and raw.is_integer():
+        raw = int(raw)
+    return [str(raw)]
+
+
+class _IdIndex:
+    def __init__(self, known: Any):
+        self.known = list(dict.fromkeys(str(k) for k in known))
+        self.exact = set(self.known)
+        self.folded: dict[str, list[str]] = {}
+        self.base: dict[str, list[str]] = {}
+        for k in self.known:
+            self.folded.setdefault(k.casefold(), []).append(k)
+            norm = k.replace("\\", "/")
+            if "/" in norm:
+                self.base.setdefault(norm.rsplit("/", 1)[1].casefold(), []).append(k)
+
+    def one(self, s: str) -> str | None:
+        """Resolve one candidate string; only unique matches count."""
+        for cand in dict.fromkeys((s, normalize_entry_id(s))):
+            if cand in self.exact:
+                return cand
+        n = normalize_entry_id(s)
+        for table, key in ((self.folded, n.casefold()), (self.base, n.replace("\\", "/").casefold())):
+            hits = table.get(key, [])
+            if len(hits) == 1:
+                return hits[0]
+            if len(hits) > 1:
+                return None
+        return None
+
+    def scan(self, s: str) -> list[str]:
+        """Known ids appearing inside ``s`` as whole tokens (``entry MEMORY.md#6``)."""
+        found: list[tuple[int, str]] = []
+        for k in self.known:
+            start = s.find(k)
+            while start != -1:
+                end = start + len(k)
+                before = s[start - 1] if start else " "
+                after = s[end] if end < len(s) else " "
+                if not (before.isalnum() or before in "#/._-") and not (after.isalnum() or after in "#/_-"):
+                    found.append((start, k))
+                    break
+                start = s.find(k, start + 1)
+        return [k for _pos, k in sorted(found)]
+
+
+def resolve_targets(raw: Any, known: Any) -> tuple[list[str], list[str]]:
+    """Map model-provided targets to known entry ids. Returns (resolved ids, unresolvable strings).
+
+    Accepts a list, a single string, or a list given as one comma / semicolon / "and"-joined string
+    (also a stringified list ``"['a', 'b']"``). Each item is matched exactly, then after
+    :func:`normalize_entry_id`, then case-insensitively, then by file basename
+    (``project.md#1`` -> ``notes/project.md#1``) - the last two only when exactly one id matches.
+    An id that really contains a comma is matched whole before any splitting. Duplicates collapse."""
+    idx = known if isinstance(known, _IdIndex) else _IdIndex(known)
+    resolved: list[str] = []
+    unresolved: list[str] = []
+    for item in _flatten_targets(raw):
+        if not item.strip():
+            continue
+        hit = idx.one(item)
+        if hit is not None:
+            ids = [hit]
+        else:
+            parts = [p for p in _ID_SPLIT.split(normalize_entry_id(item)) if p.strip()]
+            got = [idx.one(p) for p in parts] if len(parts) > 1 else [None]
+            if all(g is not None for g in got):
+                ids = [g for g in got if g is not None]
+            else:
+                ids = idx.scan(item)
+                if not ids:
+                    unresolved.append(item)
+                    continue
+        for i in ids:
+            if i not in resolved:
+                resolved.append(i)
+    return resolved, unresolved
 
 
 def _clip(text: str) -> str:
@@ -397,11 +543,15 @@ def _norm_ws(s: str) -> str:
 
 def validate_evidence(ctx: DreamContext, items: Any, cites: dict[str, Message]) -> tuple[list[Evidence], int]:
     out, bad = [], 0
-    for it in items or []:
+    if isinstance(items, dict):
+        items = [items]
+    elif not isinstance(items, list):
+        items = [items] if items else []
+    for it in items:
         if not isinstance(it, dict):
             bad += 1
             continue
-        cit = str(it.get("citation", "")).strip().strip("[]")
+        cit = normalize_entry_id(it.get("citation", ""))
         msg = cites.get(cit) or cites.get(cit.replace("\\", "/").rsplit("/", 1)[-1])
         if msg is None:
             bad += 1
@@ -425,14 +575,14 @@ def convert_operations(ctx: DreamContext, phase: str, raw_ops: list[dict], origi
     visible = call.visible_ids() if call is not None and call.chunked else None
     excerpts = call.excerpt_ids() if call is not None else set()
     live = {e.id: e for e in ctx.entries}
+    ids = _IdIndex(live)
     out: list[Operation] = []
     for i, r in enumerate(raw_ops):
         typ = str(r.get("type", "")).lower().strip()
         if typ not in allowed:
             ctx.warn(f"{phase}{where}: dropped LLM operation #{i} with unsupported type {typ!r}")
             continue
-        targets = [str(t) for t in (r.get("targets") or [])]
-        unknown = [t for t in targets if t not in live]
+        targets, unknown = resolve_targets(r.get("targets"), ids)
         if unknown:
             ctx.warn(f"{phase}{where}: dropped LLM operation #{i}: unknown entry id(s) {unknown}")
             continue
@@ -440,7 +590,14 @@ def convert_operations(ctx: DreamContext, phase: str, raw_ops: list[dict], origi
             ctx.warn(f"{phase}{where}: dropped LLM operation #{i}: targets entries not shown in this part")
             continue
         new_content = r.get("new_content")
+        if isinstance(new_content, dict):  # {"content": "..."} / {"text": "..."}
+            new_content = new_content.get("content") or new_content.get("text")
+        if new_content is not None and not isinstance(new_content, (str, int, float)):
+            ctx.warn(f"{phase}{where}: LLM operation #{i} had a non-text new_content "
+                     f"({type(new_content).__name__}); ignored it")
+            new_content = None
         new_content = str(new_content).strip() if new_content not in (None, "") else None
+        new_content = new_content or None
         evidence, bad = validate_evidence(ctx, r.get("evidence"), cites)
         if bad:
             ctx.warn(f"{phase}{where}: LLM operation #{i} had {bad} unverifiable evidence item(s)")
@@ -646,6 +803,48 @@ def reduce_operations(ctx: DreamContext, per_call: list[list[Operation]]) -> lis
     return [op for _pos, op in sorted(survivors + flags, key=lambda x: x[0])]
 
 
+# ------------------------------------------------------------------ retries
+
+#: injectable for tests (``monkeypatch.setattr(llm, "retry_sleep", waits.append)``)
+retry_sleep: Callable[[float], None] = time.sleep
+
+
+def is_retryable(exc: BaseException) -> bool:
+    """Transient failures worth retrying: timeouts and backend errors flagged retryable
+    (HTTP 408 / 429 / 5xx). Bad output, auth errors and claude-cli failures are not."""
+    if isinstance(exc, TimeoutError):
+        return True
+    return bool(getattr(exc, "retryable", False))
+
+
+def retry_delay(exc: BaseException, attempt: int, backoff: float, max_wait: float) -> float:
+    after = getattr(exc, "retry_after", None)
+    wait = float(after) if isinstance(after, (int, float)) and after >= 0 else backoff * (2 ** attempt)
+    return max(0.0, min(float(max_wait), wait))
+
+
+def complete_with_retries(ctx: DreamContext, phase: str, prompt: str, where: str = "") -> Any:
+    """``backend.complete`` with bounded retries + exponential back-off (Retry-After honoured)."""
+    cfg = ctx.config
+    backend = ctx.backend
+    retries = max(0, int(cfg.llm_retries))
+    for attempt in range(retries + 1):
+        try:
+            return backend.complete(SYSTEM_PROMPT, prompt, OPERATIONS_SCHEMA)
+        except DreamCanceled:
+            raise
+        except Exception as exc:
+            if attempt >= retries or not is_retryable(exc):
+                raise
+            wait = retry_delay(exc, attempt, cfg.llm_retry_backoff, cfg.llm_retry_max_wait)
+            ctx.warn(f"{phase}{where}: {backend.describe()} {type(exc).__name__}: {shorten(str(exc), 120)}; "
+                     f"retry {attempt + 1}/{retries} in {wait:.1f}s")
+            ctx.check_cancel()
+            retry_sleep(wait)
+            ctx.check_cancel()
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 # ------------------------------------------------------------------ phase runner
 
 @dataclass
@@ -687,9 +886,12 @@ def run_llm_phase(ctx: DreamContext, phase: str) -> PhaseResult:
             for k, v in ctx.redactor.report.counts.items():
                 if v > before.get(k, 0):
                     ctx.redaction_counts[k] = ctx.redaction_counts.get(k, 0) + v - before.get(k, 0)
+        where = f" part {call.index + 1}/{len(calls)}" if len(calls) > 1 else ""
         try:
-            raw = backend.complete(SYSTEM_PROMPT, prompt, OPERATIONS_SCHEMA)
-            ops = extract_operations(parse_json_loose(raw))
+            raw = complete_with_retries(ctx, phase, prompt, where)
+            ops, junk = split_operations(parse_json_loose(raw))
+            if junk:
+                ctx.warn(f"{phase}{where}: dropped {junk} non-object item(s) from the model's operations list")
         except DreamCanceled:
             raise
         except Exception as exc:

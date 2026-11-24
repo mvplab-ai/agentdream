@@ -13,7 +13,15 @@ Formats:
   non-empty line, role ``log``).
 
 Each :class:`Message` keeps ``source_path`` + ``line_no`` (1-based) or ``index`` so
-evidence can be cited as ``file:line``.
+evidence can be cited as ``file:line``. Lines are counted on CRLF / LF / lone CR only (see
+:func:`agentdream.util.split_lines`), so Windows files and JSON strings containing U+2028
+cite the line an editor shows. Files are decoded as UTF-8 (a BOM is ignored; invalid bytes
+become U+FFFD).
+
+Errors: every problem with a transcript file surfaces as :class:`LoaderError` (missing or
+unreadable files, a forced format the content can't satisfy, unknown formats). Malformed
+lines inside a JSONL transcript are skipped and reported in ``metadata["skipped_lines"]``
+and as a notice; they never abort the load.
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Message, Transcript
+from .util import parse_timestamp, split_lines
 
 TRANSCRIPT_EXTS = {".jsonl", ".json", ".txt", ".log", ".md", ".chat", ".transcript"}
 _TURN = re.compile(r"^\s*(user|human|assistant|ai|agent|system|tool|bot|model|claude)\s*[:>]\s?(.*)$", re.I)
@@ -59,9 +68,13 @@ def _text_of(content: Any) -> str:
 
 # ---------------------------------------------------------------- format parsers
 
+def _ts(value: Any) -> str | None:
+    return None if value is None or isinstance(value, (dict, list)) else str(value)
+
+
 def parse_claude_code(path: str, text: str) -> list[Message]:
     msgs: list[Message] = []
-    for ln, line in enumerate(text.splitlines(), start=1):
+    for ln, line in enumerate(split_lines(text), start=1):
         if not line.strip():
             continue
         try:
@@ -72,9 +85,11 @@ def parse_claude_code(path: str, text: str) -> list[Message]:
             continue
         if obj.get("isMeta"):
             continue
-        msg = obj.get("message") or {}
-        role = msg.get("role") or obj["type"]
-        ts = obj.get("timestamp")
+        msg = obj.get("message")
+        if not isinstance(msg, dict):
+            continue
+        role = str(msg.get("role") or obj["type"])
+        ts = _ts(obj.get("timestamp"))
         content = msg.get("content")
         if isinstance(content, str):
             if content.strip() and not _NOISE.match(content):
@@ -93,9 +108,11 @@ def parse_claude_code(path: str, text: str) -> list[Message]:
                     texts.append(t)
             elif bt == "tool_use":
                 inp = block.get("input") or {}
+                if not isinstance(inp, dict):
+                    inp = {"input": inp}
                 detail = inp.get("command") or inp.get("file_path") or inp.get("pattern") or inp.get("url") or ""
                 if not detail and inp:
-                    detail = json.dumps(inp, ensure_ascii=False)[:160]
+                    detail = json.dumps(inp, ensure_ascii=False, default=str)[:160]
                 msgs.append(Message("tool", f"[tool] {block.get('name', 'tool')}: {str(detail)[:300]}", ts, ln, path))
             elif bt == "tool_result" and block.get("is_error"):
                 t = _text_of(block.get("content")).strip()
@@ -108,7 +125,7 @@ def parse_claude_code(path: str, text: str) -> list[Message]:
 
 def parse_jsonl(path: str, text: str) -> list[Message]:
     msgs: list[Message] = []
-    for ln, line in enumerate(text.splitlines(), start=1):
+    for ln, line in enumerate(split_lines(text), start=1):
         if not line.strip():
             continue
         try:
@@ -123,13 +140,13 @@ def parse_jsonl(path: str, text: str) -> list[Message]:
             continue
         ts = obj.get("timestamp") or obj.get("time") or obj.get("ts") or obj.get("created_at")
         msgs.append(Message(_ROLE_MAP.get(str(role).lower(), str(role).lower()), content.strip(),
-                            str(ts) if ts is not None else None, ln, path))
+                            _ts(ts), ln, path))
     return msgs
 
 
 def _line_index(text: str) -> Callable[[int], int]:
     starts = [0]
-    for m in re.finditer("\n", text):
+    for m in re.finditer(r"\r\n|\r|\n", text):
         starts.append(m.end())
 
     def line_of(offset: int) -> int:
@@ -146,7 +163,10 @@ def _line_index(text: str) -> Callable[[int], int]:
 
 
 def parse_openai(path: str, text: str) -> list[Message]:
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except (ValueError, RecursionError) as exc:
+        raise LoaderError(f"{path}: not valid JSON ({str(exc)[:120]})") from exc
     items = data.get("messages") if isinstance(data, dict) else data
     if not isinstance(items, list):
         raise LoaderError(f"{path}: no messages list")
@@ -159,22 +179,23 @@ def parse_openai(path: str, text: str) -> list[Message]:
             continue
         content = _text_of(obj.get("content"))
         if obj.get("tool_calls") and not content:
-            calls = obj["tool_calls"]
-            names = ", ".join(str((c.get("function") or {}).get("name", "tool")) for c in calls if isinstance(c, dict))
-            content = f"[tool] {names}"
+            calls = obj["tool_calls"] if isinstance(obj["tool_calls"], list) else []
+            funcs = [c.get("function") for c in calls if isinstance(c, dict)]
+            names = ", ".join(str(f.get("name", "tool")) if isinstance(f, dict) else "tool" for f in funcs)
+            content = f"[tool] {names or 'tool'}"
         if not content.strip():
             continue
         ln = line_of(role_offsets[i]) if i < len(role_offsets) else None
         role = str(obj.get("role", "unknown"))
         if role == "tool" and len(content) > 400:
             content = content[:400] + "..."
-        m = Message(role, content.strip(), obj.get("timestamp"), ln, path, index=i)
+        m = Message(role, content.strip(), _ts(obj.get("timestamp")), ln, path, index=i)
         msgs.append(m)
     return msgs
 
 
 def parse_text(path: str, text: str) -> list[Message]:
-    lines = text.splitlines()
+    lines = split_lines(text)
     turns = [i for i, ln in enumerate(lines) if _TURN.match(ln)]
     msgs: list[Message] = []
     if turns:
@@ -215,13 +236,14 @@ def register_loader(name: str, parser: Callable[[str, str], list[Message]]) -> N
 
 
 def detect_format(text: str, path: str = "") -> str:
+    text = text.lstrip("\ufeff")
     stripped = text.lstrip()
     if not stripped:
         return "text"
     if stripped[0] in "[{":
         try:
             data = json.loads(text)
-        except ValueError:
+        except (ValueError, RecursionError):
             data = None
         if data is not None:
             if isinstance(data, list) or (isinstance(data, dict) and isinstance(data.get("messages"), list)):
@@ -234,13 +256,13 @@ def detect_format(text: str, path: str = "") -> str:
     # it's JSONL when most sampled lines are JSON objects.
     objs = []
     sampled = 0
-    for line in text.splitlines()[:50]:
+    for line in split_lines(text)[:50]:
         if not line.strip():
             continue
         sampled += 1
         try:
             o = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if isinstance(o, dict):
             objs.append(o)
@@ -252,18 +274,47 @@ def detect_format(text: str, path: str = "") -> str:
     return "text"
 
 
+def _malformed_lines(text: str) -> list[int]:
+    """1-based numbers of non-blank JSONL lines that aren't JSON objects."""
+    bad = []
+    for ln, line in enumerate(split_lines(text), start=1):
+        if not line.strip():
+            continue
+        try:
+            ok = isinstance(json.loads(line), dict)
+        except (ValueError, RecursionError):
+            ok = False
+        if not ok:
+            bad.append(ln)
+    return bad
+
+
 def load_transcript(path: str | os.PathLike, format: str | None = None) -> Transcript:
     p = Path(path)
-    text = p.read_text(encoding="utf-8", errors="replace")
+    try:
+        raw = p.read_bytes()
+        mtime = p.stat().st_mtime
+    except OSError as exc:
+        raise LoaderError(f"cannot read transcript {p}: {exc.strerror or exc}") from exc
+    text = raw.decode("utf-8-sig", errors="replace")
     fmt = format or detect_format(text, str(p))
     if fmt not in PARSERS:
         raise LoaderError(f"unknown transcript format {fmt!r}")
-    msgs = PARSERS[fmt](str(p), text)
+    try:
+        msgs = PARSERS[fmt](str(p), text)
+    except LoaderError:
+        raise
+    except (ValueError, TypeError, AttributeError, KeyError, RecursionError) as exc:
+        raise LoaderError(f"{p}: could not parse as {fmt} ({type(exc).__name__}: {str(exc)[:120]})") from exc
     if fmt != "openai":  # openai parser already stores the original message index
         for i, m in enumerate(msgs):
             m.index = i
-    return Transcript(id=p.stem, messages=msgs, source_path=str(p), format=fmt,
-                      metadata={"mtime": p.stat().st_mtime, "bytes": len(text.encode("utf-8"))})
+    meta: dict[str, Any] = {"mtime": mtime, "bytes": len(raw)}
+    if fmt in ("jsonl", "claude-code"):
+        skipped = _malformed_lines(text)
+        if skipped:
+            meta["skipped_lines"] = skipped
+    return Transcript(id=p.stem, messages=msgs, source_path=str(p), format=fmt, metadata=meta)
 
 
 def expand_sources(sources: Iterable[str | os.PathLike] | str | os.PathLike) -> list[Path]:
@@ -310,11 +361,18 @@ def _natural(s: str) -> list:
     return [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", s)]
 
 
-def _sort_key(t: Transcript) -> tuple:
-    from .util import parse_timestamp
+def first_timestamp(t: Transcript) -> float | None:
+    """Epoch seconds of the first message with a *parsable* timestamp (junk timestamps are skipped)."""
+    for m in t.messages:
+        ts = parse_timestamp(m.timestamp)
+        if ts is not None:
+            return ts
+    return None
 
-    ts = parse_timestamp(t.started_at)
-    return (0 if ts is not None else 1, ts or 0.0, t.metadata.get("mtime", 0.0), t.source_path or "")
+
+def _sort_key(t: Transcript) -> tuple:
+    ts = first_timestamp(t)
+    return (0 if ts is not None else 1, ts or 0.0, _natural(t.source_path or ""))
 
 
 def load_transcripts(sources: Iterable[str | os.PathLike[str]] | str | os.PathLike[str] | None,
@@ -328,13 +386,19 @@ def load_transcripts(sources: Iterable[str | os.PathLike[str]] | str | os.PathLi
     files = expand_sources(sources) if sources else []
     notices: list[str] = []
     ts: list[Transcript] = []
+    empty = 0
     for f in files:
         t = load_transcript(f, format)
+        bad = t.metadata.get("skipped_lines")
+        if bad:
+            shown = ", ".join(map(str, bad[:10])) + (", ..." if len(bad) > 10 else "")
+            notices.append(f"skipped {len(bad)} malformed line(s) in {f} (line {shown})")
         if not t.messages:
             notices.append(f"skipped empty transcript {f}")
+            empty += 1
             continue
         ts.append(t)
-    all_have_ts = all(t.started_at for t in ts)
+    all_have_ts = all(first_timestamp(t) is not None for t in ts)
     if all_have_ts:
         ts.sort(key=_sort_key)
     else:
@@ -344,7 +408,8 @@ def load_transcripts(sources: Iterable[str | os.PathLike[str]] | str | os.PathLi
         notices.append(f"{len(ts)} sessions found; keeping the most recent {max_sessions} (max_sessions)")
         ts = ts[-max_sessions:]
     if len(ts) < min_sessions:
-        raise LoaderError(f"need at least {min_sessions} session transcript(s), found {len(ts)}")
+        raise LoaderError(f"need at least {min_sessions} session transcript(s), found {len(ts)}"
+                          + (f" ({empty} empty transcript(s) skipped)" if empty else ""))
     seen_ids: dict[str, int] = {}
     for t in ts:
         if t.id in seen_ids:

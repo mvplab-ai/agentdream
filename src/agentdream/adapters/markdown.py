@@ -16,18 +16,27 @@ Writing re-renders only what changed: untouched files are copied byte for
 byte, edited entries are re-rendered in place with their original bullet
 marker, removed entries are dropped, and new entries are inserted at the end
 of their section (or into ``dream-insights.md`` when they have no path).
+
+Text handling: files are read as UTF-8 (a BOM is kept; invalid bytes become U+FFFD and a
+notice names the file). Lines break on CRLF / LF / lone CR only, and a rewritten file keeps
+its dominant line ending and BOM. Entry ``path`` values that would escape the store (``..``,
+absolute, drive letters, ``~``, hidden or non-text files) are written to ``dream-insights.md``
+instead. Symlinks pointing outside the store are never read (their content is not memory the
+store owns) and are recreated as the same symlink in the output.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..models import MemoryEntry
+from ..util import dominant_newline, split_lines
 from .base import AdapterError, MemoryAdapter
 
 TEXT_EXTS = {".md", ".markdown", ".txt"}
@@ -54,6 +63,30 @@ class _ParsedFile:
     lines: list[str]
     frontmatter: str | None = None
     blocks: list[_Block] = field(default_factory=list)
+    newline: str = "\n"
+    bom: bool = False
+
+    def encode(self, text: str) -> bytes:
+        """Normalised (``\\n``) text -> bytes with this file's line ending and BOM."""
+        if self.newline != "\n":
+            text = text.replace("\n", self.newline)
+        return (("\ufeff" if self.bom else "") + text).encode("utf-8")
+
+
+def safe_relpath(rel: str | None) -> str | None:
+    """``rel`` as a clean POSIX relative path inside the store, or None if it would escape it
+    (``..``, absolute, drive letter, ``~``), is hidden, or isn't a markdown/text file."""
+    if not rel or "\x00" in rel:
+        return None
+    r = rel.replace("\\", "/")
+    if r.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", r):
+        return None
+    parts = [p for p in PurePosixPath(r).parts if p not in ("", ".")]
+    if not parts or any(p == ".." or p.startswith(".") for p in parts):
+        return None
+    if PurePosixPath(parts[-1]).suffix.lower() not in TEXT_EXTS:
+        return None
+    return "/".join(parts)
 
 
 def _parse_frontmatter(raw: str) -> dict[str, str]:
@@ -73,8 +106,11 @@ def _date_in(text: str) -> str | None:
 
 
 def parse_markdown(rel: str, text: str) -> _ParsedFile:
-    lines = text.splitlines()
-    pf = _ParsedFile(rel=rel, text=text, lines=lines)
+    bom = text.startswith("\ufeff")
+    newline = dominant_newline(text)
+    text = re.sub(r"\r\n|\r", "\n", text[1:] if bom else text)
+    lines = split_lines(text)
+    pf = _ParsedFile(rel=rel, text=text, lines=lines, newline=newline, bom=bom)
     fm = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.S)
     if fm:
         pf.frontmatter = text[: fm.end()]
@@ -190,6 +226,8 @@ class MarkdownAdapter(MemoryAdapter):
         super().__init__(path, **options)
         self.single_file = self.path.is_file()
         self._cache: dict[str, _ParsedFile] | None = None
+        #: symlinks (relative path -> link target) that point outside the store: not read, kept as links
+        self.outside_links: dict[str, str] = {}
 
     @classmethod
     def detect(cls, path: Path) -> bool:
@@ -200,10 +238,25 @@ class MarkdownAdapter(MemoryAdapter):
         return False
 
     @staticmethod
-    def _iter_files(root: Path) -> Iterator[Path]:
+    def _inside(p: Path, root: Path) -> bool:
+        try:
+            target, base = p.resolve(), root.resolve()
+        except (OSError, RuntimeError):  # symlink loops
+            return False
+        return target == base or base in target.parents
+
+    @classmethod
+    def _iter_files(cls, root: Path, outside: dict[str, str] | None = None) -> Iterator[Path]:
+        """Non-hidden regular files under ``root``. Symlinks (to files or directories) that resolve
+        outside ``root`` are not yielded; they are reported in ``outside`` (rel -> link target)."""
         for p in sorted(root.rglob("*")):
             rel = p.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):
+                continue
+            # rglob never descends into symlinked directories, so only links themselves can escape
+            if p.is_symlink() and not cls._inside(p, root):
+                if outside is not None:
+                    outside[rel.as_posix()] = os.readlink(p)
                 continue
             if p.is_file():
                 yield p
@@ -214,13 +267,26 @@ class MarkdownAdapter(MemoryAdapter):
         if not self.path.exists():
             raise AdapterError(f"memory store not found: {self.path}")
         out: dict[str, _ParsedFile] = {}
+        self.outside_links = {}
         if self.single_file:
             files = [(self.path.name, self.path)]
         else:
-            files = [(str(p.relative_to(self.path).as_posix()), p) for p in self._iter_files(self.path)
-                     if p.suffix.lower() in TEXT_EXTS]
+            files = [(str(p.relative_to(self.path).as_posix()), p)
+                     for p in self._iter_files(self.path, self.outside_links) if p.suffix.lower() in TEXT_EXTS]
+            for rel, target in self.outside_links.items():
+                self.notices.append(f"{rel} is a symlink to {target}, outside the memory store: not read "
+                                    "(kept as a link in the output)")
         for rel, p in files:
-            text = p.read_text(encoding="utf-8", errors="replace")
+            try:
+                raw = p.read_bytes()
+            except OSError as exc:
+                raise AdapterError(f"cannot read memory file {p}: {exc.strerror or exc}") from exc
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                text = raw.decode("utf-8", errors="replace")
+                self.notices.append(f"{rel} contains invalid UTF-8 (first bad byte at offset {exc.start}); "
+                                    "those bytes read as U+FFFD and are written that way if the file is rewritten")
             out[rel] = parse_markdown(rel, text)
         self._cache = out
         return out
@@ -252,8 +318,9 @@ class MarkdownAdapter(MemoryAdapter):
                 if b.entry.key and pf_.frontmatter is None:
                     section_home.setdefault(b.entry.key, rel_)
         for e in entries:
-            if e.path and (e.path in files or not self.single_file):
-                rel = e.path
+            safe = e.path if e.path in files else safe_relpath(e.path)
+            if safe and (safe in files or not self.single_file):
+                rel = safe
             elif e.key and e.key in section_home:
                 rel = section_home[e.key]
             else:
@@ -272,9 +339,13 @@ class MarkdownAdapter(MemoryAdapter):
 
         if self.single_file:
             text = rendered.get(self.path.name, "")
+            only = files.get(self.path.name)
             dest.parent.mkdir(parents=True, exist_ok=True)
             tmp = dest.with_name(dest.name + ".tmp")
-            tmp.write_text(text, encoding="utf-8")
+            if only is not None and text == only.text:
+                shutil.copy2(self.path, tmp)
+            else:
+                tmp.write_bytes(only.encode(text) if only is not None else text.encode("utf-8"))
             tmp.replace(dest)
             return dest
 
@@ -282,20 +353,26 @@ class MarkdownAdapter(MemoryAdapter):
         if tmpdir.exists():
             shutil.rmtree(tmpdir)
         tmpdir.mkdir(parents=True)
-        # copy non-memory files verbatim
-        for p in self._iter_files(self.path):
+        # copy non-memory files verbatim; links that point outside the store stay links
+        outside: dict[str, str] = {}
+        for p in self._iter_files(self.path, outside):
             rel = p.relative_to(self.path).as_posix()
             if p.suffix.lower() not in TEXT_EXTS:
                 (tmpdir / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(p, tmpdir / rel)
+        for rel, link in outside.items():
+            (tmpdir / rel).parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(link, tmpdir / rel)
         for rel, text in rendered.items():
+            if rel in outside:  # never write through (or over) a link to outside the store
+                rel = DEFAULT_NEW_FILE
             target = tmpdir / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             src = self.path / rel
             if rel in files and text == files[rel].text:
                 shutil.copy2(src, target)
             else:
-                target.write_text(text, encoding="utf-8")
+                target.write_bytes(files[rel].encode(text) if rel in files else text.encode("utf-8"))
         if dest.exists():
             shutil.rmtree(dest)
         tmpdir.replace(dest)

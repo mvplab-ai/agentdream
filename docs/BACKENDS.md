@@ -114,7 +114,19 @@ mymodel = "my_package.backend:MyBackend"
 
 ## Failure handling
 
-If a call raises (network error, HTTP status, timeout, missing key) or returns nothing parseable, the
-phase falls back to the deterministic heuristics and the report says so under *Warnings*. In chunked runs
-only failed parts are filled in. Hallucinated ids/citations are dropped, corrections without verifiable
-evidence are downgraded to flags.
+Transient failures are retried first: timeouts and HTTP 408 / 429 / 5xx (including Anthropic's 529)
+get `llm_retries` more attempts (default 2) with exponential back-off starting at `llm_retry_backoff`
+seconds (default 2), honouring a `Retry-After` header, every wait capped at `llm_retry_max_wait` (60s).
+Other client errors (400, 401, ...) and claude-cli failures (non-zero exit, timeout) are not retried.
+A custom backend opts in by raising `BackendError(..., retryable=True, retry_after=seconds)` (or a
+`TimeoutError`).
+
+If a call still fails or returns nothing parseable, the phase falls back to the deterministic
+heuristics and the report says so under *Warnings*. In chunked runs only failed parts are filled in.
+Hallucinated ids/citations are dropped, corrections without verifiable evidence are downgraded to flags.
+
+Entries are shown to the model as `[MEMORY.md#1] text`, and the system prompt asks for the bracket
+contents verbatim. Ids the model mangles anyway - `id='MEMORY.md#1'`, `id='id='MEMORY.md#6'`, quotes,
+backticks, brackets, a whole list as one `"a, b"` string - are normalised and resolved to a known id
+only when the match is unique (exact, then case-insensitive, then by file basename); a warning is
+recorded only for ids that stay unresolvable.

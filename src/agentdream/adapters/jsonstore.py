@@ -9,17 +9,23 @@ Accepted shapes per file:
 Entry objects may use ``content`` / ``text`` / ``memory`` / ``value`` / ``note`` for the
 text. Unknown fields are preserved in ``metadata`` and written back.
 The output keeps the same shape as the input.
+
+Files are UTF-8 (a BOM is accepted). A memory store is never repaired silently: invalid UTF-8,
+invalid JSON (trailing commas, a truncated last line) or a non-object JSONL line raise
+:class:`AdapterError` naming ``file:line``, because dropping the entry would lose it on accept.
+A folder store keeps its non-JSON files when written.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 from pathlib import Path
 from typing import Any
 
 from ..models import MemoryEntry
-from ..util import atomic_write_text
+from ..util import atomic_write_text, split_lines
 from .base import AdapterError, MemoryAdapter
 
 _TEXT_KEYS = ("content", "text", "memory", "value", "note", "body")
@@ -97,16 +103,44 @@ class JSONAdapter(MemoryAdapter):
         return [(p.relative_to(self.path).as_posix(), p) for p in sorted(self.path.rglob("*"))
                 if p.is_file() and p.suffix.lower() in (".json", ".jsonl") and not p.name.startswith(".")]
 
+    @staticmethod
+    def _read(rel: str, p: Path) -> str:
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise AdapterError(f"cannot read memory file {p}: {exc.strerror or exc}") from exc
+        try:
+            return raw.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise AdapterError(f"{rel}: not valid UTF-8 (byte 0x{raw[exc.start]:02x} at offset {exc.start}); "
+                               "re-save the file as UTF-8") from exc
+
     def load(self) -> list[MemoryEntry]:
         entries: list[MemoryEntry] = []
         for rel, p in self._files():
-            text = p.read_text(encoding="utf-8")
+            text = self._read(rel, p)
             if p.suffix.lower() == ".jsonl":
                 self._shapes[rel] = {"kind": "jsonl"}
-                for i, line in enumerate(ln for ln in text.splitlines() if ln.strip()):
-                    entries.append(_entry_from_obj(json.loads(line), rel, i))
+                i = 0
+                for ln, line in enumerate(split_lines(text), start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except (ValueError, RecursionError) as exc:
+                        raise AdapterError(f"{rel}:{ln}: invalid JSON ({str(exc)[:100]}); fix or remove the line "
+                                           "(a cut-off last line usually means an interrupted write)") from exc
+                    if not isinstance(obj, (dict, str)):
+                        raise AdapterError(f"{rel}:{ln}: entry is not an object ({type(obj).__name__})")
+                    entries.append(_entry_from_obj(obj, rel, i))
+                    i += 1
                 continue
-            data = json.loads(text) if text.strip() else []
+            try:
+                data = json.loads(text) if text.strip() else []
+            except json.JSONDecodeError as exc:
+                raise AdapterError(f"{rel}: invalid JSON at line {exc.lineno} column {exc.colno}: {exc.msg}") from exc
+            except (ValueError, RecursionError) as exc:
+                raise AdapterError(f"{rel}: invalid JSON ({str(exc)[:100]})") from exc
             if isinstance(data, list):
                 self._shapes[rel] = {"kind": "list"}
                 items = data
@@ -152,7 +186,11 @@ class JSONAdapter(MemoryAdapter):
                 out = {}
                 for e in ents:
                     k = e.key or e.id
-                    out[k] = json.loads(e.content) if e.metadata.get("_map_raw") else e.content
+                    out[k] = e.content
+                    if e.metadata.get("_map_raw"):
+                        # structured value; an operation may have rewritten it as plain text
+                        with contextlib.suppress(ValueError):
+                            out[k] = json.loads(e.content)
                 return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
             items = [_obj_from_entry(e) for e in ents]
             if shape["kind"] == "wrapped":
@@ -166,6 +204,12 @@ class JSONAdapter(MemoryAdapter):
         if tmp.exists():
             shutil.rmtree(tmp)
         tmp.mkdir(parents=True)
+        # a folder store may hold other files (README, notes...): keep them
+        for p in sorted(self.path.rglob("*")):
+            rel = p.relative_to(self.path).as_posix()
+            if p.is_file() and rel not in groups and not any(part.startswith(".") for part in rel.split("/")):
+                (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, tmp / rel)
         for rel, ents in groups.items():
             (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
             (tmp / rel).write_text(render(rel, ents), encoding="utf-8")

@@ -196,7 +196,8 @@ class PartialSight(LLMBackend):
         part = re.search(r"Input part (\d+) of (\d+)", prompt)
         if part and int(part.group(1)) in self.fail_parts and "Task: VERIFY" in prompt:
             raise RuntimeError("simulated outage")
-        ids = dict(re.findall(r"^- id='([^']+)'.*\n  (.*)$", prompt, re.M))
+        memory = prompt.split("## Memory store", 1)[1].split("## Session transcripts", 1)[0]
+        ids = dict(re.findall(r"^\[([^\]]+)\] (.*)$", memory, re.M))
         cites = re.findall(r"^\[([^\]]+)\](?: @\S+)? \w+: (.*)$", prompt, re.M)
         ops = []
         if "Task: CONSOLIDATE" in prompt:

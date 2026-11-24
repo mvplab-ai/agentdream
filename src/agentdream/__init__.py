@@ -16,7 +16,7 @@ from .loaders import load_transcript, load_transcripts, register_loader
 from .models import Evidence, MemoryEntry, Message, Operation, Transcript, apply_operations
 from .pipeline import DreamLimitError, Pipeline, run_dream
 from .redact import Redactor, redact
-from .review import AcceptResult, ReviewError, accept, discard
+from .review import AcceptResult, ReviewError, accept, discard, restore
 from .scheduler import Scheduler
 
 __all__ = [
@@ -55,5 +55,6 @@ __all__ = [
     "register_adapter",
     "register_backend",
     "register_loader",
+    "restore",
     "run_dream",
 ]

@@ -18,9 +18,11 @@ Thanks for helping! agentdream aims to stay small, dependable and dependency-fre
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ".[dev]"                 # pytest, pytest-cov, ruff, mypy
+.venv/bin/pip install -e ".[dev]"                 # pytest, pytest-cov, hypothesis, ruff, mypy
 .venv/bin/pip install -e ".[stancelog]"           # optional: run the stancelog adapter tests too
-.venv/bin/python -m pytest -q                      # ~10 s
+.venv/bin/python -m pytest -q                      # ~25 s
+.venv/bin/python -m pytest -q -m edge              # only the edge-case suite (tests/edge)
+.venv/bin/python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # refresh the edge-case table
 .venv/bin/python -m pytest -q --cov=agentdream --cov-report=term-missing   # CI enforces fail_under
 .venv/bin/ruff check src tests examples
 .venv/bin/mypy                                     # config in pyproject.toml
@@ -30,6 +32,10 @@ Docs are tested too: `tests/test_docs.py` runs every Python block marked `<!-- t
 README and `docs/`, parses every `agentdream ...` command line against the real CLI, and lints the Mermaid
 diagrams. Regenerate the README's before/after sample with `python examples/run_example.py` if you change
 the heuristics.
+
+Edge cases go in `tests/edge/test_<area>.py` (one file per area) with a one-line docstring per test; the
+first docstring line becomes the case text in [docs/EDGE_CASES.md](docs/EDGE_CASES.md). Fix the code to make a
+case pass, never the assertion.
 
 The live smoke test (`tests/test_live.py`) runs only with `AGENTDREAM_LIVE=1` and a logged-in `claude` CLI.
 

@@ -156,6 +156,26 @@ def resolved_preference_content(older_text: str, newer_text: str, newer: Claim) 
     return f"Prefer {obj}" if newer.polarity > 0 else f"Avoid {obj}"
 
 
+def stance_changes(steps: list[tuple[str, str, int]]) -> list[str]:
+    """``(label, text, polarity)`` steps in chronological order -> ``"label: text"`` history lines
+    for every stance change (the first statement of each run), always ending with the latest
+    statement. A -> A -> not-A -> A gives three lines: the first A, the not-A, the final A."""
+    out: list[str] = []
+    last_pol: int | None = None
+    for i, (label, text, pol) in enumerate(steps):
+        if pol != last_pol or i == len(steps) - 1:
+            line = f"{label}: {text}"
+            if not out or out[-1] != line:
+                out.append(line)
+            last_pol = pol
+    return out
+
+
+def _merged_notes(e: MemoryEntry) -> list[dict]:
+    """Notes a duplicate merge folded into ``e`` (adapter-private ``_merged`` metadata)."""
+    return [m for m in e.metadata.get("_merged") or [] if isinstance(m, dict) and m.get("content")]
+
+
 def history_suffix(older_text: str, older_when: str | None, newer_ref: str | None) -> str:
     when = f" ({older_when[:10]})" if older_when else ""
     later = f"; reversed later ({newer_ref})" if newer_ref else "; reversed by a later note"
@@ -207,7 +227,11 @@ def _merge_duplicates(ctx: DreamContext) -> None:
         others = [e for e in members if e.id != survivor.id]
         merged = survivor.copy()
         merged.content = content
-        merged.metadata = {**merged.metadata, "merged_from": sorted(e.id for e in members)}
+        # "_merged" (adapter-private, never written to a store) keeps the folded notes so a later
+        # contradiction about this entry can show the full stance history, including them
+        folded = [m for e in members for m in _merged_notes(e)]
+        folded += [{"id": e.id, "content": e.content, "when": _when(e) or None} for e in others]
+        merged.metadata = {**merged.metadata, "merged_from": sorted(e.id for e in members), "_merged": folded}
         stamps = [parse_timestamp(_when(e)) for e in members]
         created = [e.created_at for e in members if e.created_at]
         if created:
@@ -259,8 +283,23 @@ def _memory_conflicts(ctx: DreamContext) -> None:
         resolved = newest.copy()
         resolved.content = current
         others = [entries[k] for k in ordered[:-1]]
+        # full chain: every note of the group plus the duplicates merged into them, oldest first
+        steps: list[tuple[float, int, dict]] = []
+        for pos, k in enumerate(ordered):
+            e = entries[k]
+            host_ts = parse_timestamp(_when(e))
+            pol = _claim(claims, k).polarity
+            for m in _merged_notes(e):
+                ts = parse_timestamp(m.get("when"))
+                steps.append((ts if ts is not None else (host_ts if host_ts is not None else float("-inf")), pos,
+                              {"content": m["content"], "when": m.get("when"), "id": m.get("id"), "pol": pol}))
+            steps.append((host_ts if host_ts is not None else float("-inf"), pos,
+                          {"content": e.content, "when": _when(e) or None, "id": e.id, "pol": pol}))
+        steps.sort(key=lambda s: (s[0], s[1]))
+        chain = [s[2] for s in steps]
         resolved.metadata = {**resolved.metadata, "history": [
-            {"content": e.content, "when": _when(e) or None, "id": e.id} for e in others]}
+            {"content": c["content"], "when": c["when"], "id": c["id"]} for c in chain[:-1]]}
+        resolved.metadata.pop("_merged", None)
         has_ts = any(_when(entries[k]) for k in ordered)
         op = Operation(
             id=Operation.make_id("contradiction", [e.id for e in others] + [newest.id], [current]),
@@ -271,8 +310,8 @@ def _memory_conflicts(ctx: DreamContext) -> None:
                     " is kept as the current value and the earlier stance is recorded as history."),
             targets=[e.id for e in others] + [newest.id], remove=[e.id for e in others], upsert=[resolved],
             before=[e.content for e in others] + [newest.content], after=[current],
-            history=[f"{_when(e) or 'earlier'}: {e.content}" for e in others] +
-                    [f"{_when(newest) or 'later'}: {newest.content}"],
+            history=[f"{c['when'] or ('later' if i == len(chain) - 1 else 'earlier')}: {c['content']}"
+                     for i, c in enumerate(chain)],
             confidence=0.75 if has_ts else 0.55, phase="consolidate",
         )
         ctx.add_op(op)
@@ -634,8 +673,11 @@ def _verify_preference(ctx: DreamContext, entry: MemoryEntry, claim: Claim) -> b
         reason="The note's stance was contradicted by a later transcript statement about the same subject; the "
                "latest stance becomes the current value and the earlier one is kept as history.",
         targets=[entry.id], remove=[], upsert=[new], before=[entry.content], after=[current],
-        evidence=evidence, history=[f"{_when(entry) or 'memory'}: {entry.content}",
-                                    f"{last_rec.msg.citation}: {last_rec.text}"],
+        evidence=evidence,
+        # the full chain: the note (and duplicates merged into it), then every later stance change
+        history=[f"{m.get('when') or 'memory'}: {m['content']}" for m in _merged_notes(entry)] + stance_changes(
+            [(_when(entry) or "memory", entry.content, claim.polarity)]
+            + [(r.msg.citation, r.text, c.polarity) for r, c in stmts]),
         confidence=0.7, phase="verify",
     )
     ctx.add_op(op)
@@ -776,7 +818,7 @@ def _preference_insights(ctx: DreamContext, budget: list[int]) -> None:
                 reason="An earlier session rejected this and a later one preferred it (or vice versa); the latest "
                        "stance is recorded as current with the earlier one as history.",
                 upsert=[entry], after=[current], evidence=ev,
-                history=[f"{first_rec.msg.citation}: {first_rec.text}", f"{last_rec.msg.citation}: {last_rec.text}"],
+                history=stance_changes([(r.msg.citation, r.text, c.polarity) for r, c in cl]),
                 confidence=0.6, phase="insights",
             ))
             budget[0] -= 1

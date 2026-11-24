@@ -128,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("job")
     _common(p)
 
+    p = sub.add_parser("restore", help="put back the backup an accept made (undo an accept)")
+    p.add_argument("job")
+    p.add_argument("--to", help="restore the backup here instead of over the accepted store")
+    _common(p)
+
     p = sub.add_parser("cancel", help="request cancellation of a running dream")
     p.add_argument("job")
     _common(p)
@@ -198,14 +203,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     if argv[:1] in (["hook"], ["hook-worker"]):
         return _hook_main(argv)
     args = build_parser().parse_args(argv)
+    from .adapters import AdapterError
+    from .backends import BackendError
     from .config import ConfigError
+    from .context import DreamLimitError
     from .jobs import JobNotFound
+    from .loaders import LoaderError
     from .review import ReviewError
 
     try:
         return _run(args)
-    except (JobNotFound, ReviewError, FileNotFoundError, ValueError, ConfigError) as exc:
-        print(f"agentdream: error: {exc}", file=sys.stderr)
+    except (JobNotFound, ReviewError, ValueError, ConfigError, AdapterError, LoaderError, DreamLimitError,
+            BackendError, OSError) as exc:
+        # one line, no traceback: these are user-facing conditions (bad input, permissions, disk...)
+        msg = str(exc) if not isinstance(exc, OSError) or not exc.filename else \
+            f"{exc.strerror or exc}: {exc.filename}"
+        print(f"agentdream: error: {msg}".replace("\n", " "), file=sys.stderr)
         return 2
 
 
@@ -341,6 +354,14 @@ def _run(args: argparse.Namespace) -> int:
 
         job = discard(args.job, jobs_dir=_jobs_dir(args))
         print(f"discarded {job.id}")
+        return 0
+
+    if args.cmd == "restore":
+        from .review import restore
+
+        jd = _jobs_dir(args)
+        target = restore(args.job, to=args.to, jobs_dir=jd)
+        print(f"restored {target} from the backup of {DreamJob.load(args.job, jd).backup_path}")
         return 0
 
     if args.cmd == "cancel":

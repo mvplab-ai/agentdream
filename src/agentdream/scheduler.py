@@ -3,11 +3,18 @@
 State (which sessions were already dreamed over, last run time) is kept in a
 JSON file so a restarted scheduler doesn't re-dream old sessions. Clock and
 sleep are injectable for tests.
+
+Boundaries: every trigger fires at its threshold (``>=``): idle for exactly N minutes, exactly
+N new sessions, exactly one interval since the last run. A corrupt / wrong-typed state file is
+ignored (the scheduler starts fresh and rewrites it). If the clock goes backwards past the last
+run, the interval baseline is reset to "now" instead of stalling until the clock catches up;
+a session modified "in the future" is not idle yet.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -44,6 +51,12 @@ class Scheduler:
         self.every = parse_duration(every) if every is not None else None
         self.idle = parse_duration(idle) if idle is not None else None
         self.new_sessions = new_sessions
+        if self.every is not None and self.every <= 0:
+            raise ValueError(f"--every must be a positive duration, got {every!r}")
+        if self.idle is not None and self.idle < 0:
+            raise ValueError(f"--idle must not be negative, got {idle!r}")
+        if new_sessions is not None and (not isinstance(new_sessions, int) or new_sessions < 1):
+            raise ValueError(f"--new-sessions must be >= 1, got {new_sessions!r}")
         self.clock = clock
         self.sleep = sleep
         self.apply = apply
@@ -61,10 +74,24 @@ class Scheduler:
         self.runs: list[Any] = []
 
     def _load_state(self) -> dict[str, Any]:
+        fresh: dict[str, Any] = {"dreamed": {}, "last_run": None, "started": None, "history": []}
         try:
-            return json.loads(self.state_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {"dreamed": {}, "last_run": None, "started": None}
+            data = json.loads(self.state_file.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError, RecursionError):
+            return fresh
+        if not isinstance(data, dict):
+            return fresh
+        dreamed = data.get("dreamed")
+        state = dict(fresh)
+        # values are "<size>:<mtime_ns>" signatures; anything else can't match a file and is dropped
+        state["dreamed"] = {k: v for k, v in dreamed.items() if isinstance(k, str) and isinstance(v, str)
+                            and re.fullmatch(r"\d+:\d+", v)} if isinstance(dreamed, dict) else {}
+        for key in ("last_run", "started"):
+            v = data.get(key)
+            state[key] = float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+        hist = data.get("history")
+        state["history"] = [h for h in hist if isinstance(h, dict)] if isinstance(hist, list) else []
+        return state
 
     def _save_state(self) -> None:
         atomic_write_json(self.state_file, self.state)
@@ -87,12 +114,19 @@ class Scheduler:
         if self.new_sessions is not None and len(pending) >= self.new_sessions:
             return Trigger(f"{len(pending)} new session(s) >= {self.new_sessions}", names)
         if self.idle is not None and pending:
-            latest = max(p.stat().st_mtime for p in pending)
+            try:
+                latest = max(p.stat().st_mtime for p in pending)
+            except OSError:  # a session vanished between listing and stat: check again next time
+                return None
             if now - latest >= self.idle:
                 return Trigger(f"idle for {int(now - latest)}s (>= {int(self.idle)}s) with {len(pending)} new "
                                "session(s)", names)
         if self.every is not None:
             last = float(self.state.get("last_run") or self.state.get("started") or now)
+            if now < last:  # clock went backwards (NTP step, VM restore): restart the interval from now
+                self.state["last_run"] = now
+                self._save_state()
+                return None
             if now - last >= self.every and (pending or not self.only_new):
                 return Trigger(f"interval of {int(self.every)}s elapsed", names)
         return None

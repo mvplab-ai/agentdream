@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BackendError, LLMBackend, http_post_json
+from .base import BackendError, LLMBackend, RateLimitError, http_post_json
 from .builtin import AnthropicBackend, ClaudeCLIBackend, DeterministicBackend, OpenAIBackend
 
 _REGISTRY: dict[str, type[LLMBackend]] = {
@@ -69,6 +69,7 @@ __all__ = [
     "DeterministicBackend",
     "LLMBackend",
     "OpenAIBackend",
+    "RateLimitError",
     "available_backends",
     "get_backend",
     "http_post_json",

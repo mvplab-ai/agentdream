@@ -6,6 +6,7 @@ import contextlib
 import datetime as _dt
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -99,14 +100,25 @@ def parse_duration(text: str | int | float) -> float:
 
 
 def parse_timestamp(value: Any) -> float | None:
-    """Best-effort conversion of ISO strings / epoch numbers to epoch seconds."""
-    if value is None or value == "":
+    """Best-effort conversion of ISO strings / epoch numbers to epoch seconds.
+
+    Naive timestamps are taken as UTC. Anything unparsable (impossible dates like
+    ``2026-13-45``, prose, non-finite or out-of-range numbers, wrong types) gives ``None``;
+    this never raises."""
+    if value is None or value == "" or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        v = float(value)
+        try:
+            v = float(value)
+        except OverflowError:
+            return None
+        if not math.isfinite(v):
+            return None
         return v / 1000.0 if v > 1e11 else v
-    s = str(value).strip()
-    if re.fullmatch(r"\d+(\.\d+)?", s):
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if re.fullmatch(r"\d{1,20}(\.\d+)?", s):
         return parse_timestamp(float(s))
     s = s.replace("Z", "+00:00")
     try:
@@ -115,10 +127,40 @@ def parse_timestamp(value: Any) -> float | None:
         m = re.match(r"(\d{4}-\d{2}-\d{2})", s)
         if not m:
             return None
-        dt = _dt.datetime.fromisoformat(m.group(1))
+        try:
+            dt = _dt.datetime.fromisoformat(m.group(1))
+        except ValueError:
+            return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=_dt.timezone.utc)
-    return dt.timestamp()
+    try:
+        return dt.timestamp()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+_EOL = re.compile(r"\r\n|\r|\n")
+
+
+def split_lines(text: str) -> list[str]:
+    """Split on CRLF, LF and lone CR only - the line breaks editors and ``grep -n`` agree on.
+
+    Unlike :meth:`str.splitlines` this does *not* break on U+2028/U+2029, NEL, form feed or
+    vertical tab, which are legal inside JSON strings and markdown text; line numbers used in
+    citations therefore match what a user sees. A trailing line break does not add an empty line."""
+    lines = _EOL.split(text)
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def dominant_newline(text: str) -> str:
+    """The most common line ending in ``text`` (``\\n`` when there are none or on ties)."""
+    crlf = text.count("\r\n")
+    cr = text.count("\r") - crlf
+    lf = text.count("\n") - crlf
+    best = max((lf, "\n"), (crlf, "\r\n"), (cr, "\r"), key=lambda x: x[0])
+    return best[1] if best[0] > 0 else "\n"
 
 
 def estimate_tokens(text: str) -> int:
