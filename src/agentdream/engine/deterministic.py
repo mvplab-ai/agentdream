@@ -645,7 +645,7 @@ def _preference_insights(ctx: DreamContext, budget: list[int]) -> None:
             entry = _new_entry(current, "Preferences", ev, {"history": [first_rec.text, last_rec.text]})
             ctx.add_op(Operation(
                 id=Operation.make_id("contradiction", [], [current]), type="contradiction", kind="temporal",
-                summary=f"Preference reversed across sessions; current: \"{shorten(_clean(last_rec.text), 80)}\"",
+                summary=f"Preference reversed across sessions; current: \"{shorten(current.split(' (History:')[0], 80)}\"",
                 reason="An earlier session rejected this and a later one preferred it (or vice versa); the latest "
                        "stance is recorded as current with the earlier one as history.",
                 upsert=[entry], after=[current], evidence=ev,
@@ -681,7 +681,7 @@ def _mistake_insights(ctx: DreamContext, budget: list[int]) -> None:
             continue
         if not FAILURE_MARKERS.search(rec.text):
             continue
-        if INTENT_MARKERS.search(rec.text) and not re.search(r"\b(again|error|failed|wrong|mistake)\b", rec.folded):
+        if INTENT_MARKERS.search(rec.text) and not re.search(r"\b(error|failed|wrong|mistake|oops|forgot)\b", rec.folded):
             continue
         sig = _signature(rec.text)
         if len(sig) < 2:

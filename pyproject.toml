@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.18"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -28,9 +28,8 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# All built-in LLM backends use urllib / subprocess, so no SDK is required.
-# The stancelog adapter is optional and imported lazily.
-stancelog = []
+# All built-in LLM backends use urllib / subprocess, so no SDK extra is needed.
+# The stancelog adapter is optional and imported lazily (install stancelog yourself).
 dev = ["pytest>=7"]
 
 [project.scripts]

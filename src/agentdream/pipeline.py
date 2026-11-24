@@ -149,7 +149,7 @@ def _analysis(name: str) -> Phase:
     return run
 
 
-def _focus_sort(ctx: DreamContext) -> None:
+def _focus_notice(ctx: DreamContext) -> None:
     if not ctx.config.instructions or not ctx.ops:
         return
     kws = token_set(ctx.config.instructions) - token_set("focus only on about dream memory notes skip insights "
@@ -185,7 +185,7 @@ def phase_write(ctx: DreamContext) -> None:
     if out is None:
         raise ValueError("no output directory")
     out.mkdir(parents=True, exist_ok=True)
-    _focus_sort(ctx)
+    _focus_notice(ctx)
     final = materialize(ctx.original_entries, ctx.ops, make_redactor(ctx.config))
     ctx.final_entries = final
     store_path = ctx.adapter.output_path(out / "store")

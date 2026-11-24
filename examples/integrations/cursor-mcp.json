@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agentdream": {
+      "command": "agentdream",
+      "args": ["serve-mcp"],
+      "env": {
+        "AGENTDREAM_HOME": "${workspaceFolder}/.agentdream"
+      }
+    }
+  }
+}
