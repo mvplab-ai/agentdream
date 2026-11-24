@@ -154,9 +154,10 @@ def _run(args: argparse.Namespace) -> int:
             return 1
         if args.apply:
             res = accept(job)
-            print(f"applied {len(res.applied_ops)} operation(s) to {res.target}" +
-                  (f" (backup: {res.backup})" if res.backup else ""))
-        else:
+            if not args.json:
+                print(f"applied {len(res.applied_ops)} operation(s) to {res.target}" +
+                      (f" (backup: {res.backup})" if res.backup else ""))
+        elif not args.json:
             print(f"  dry run: nothing applied. Next: agentdream accept {job.id}  |  agentdream discard {job.id}")
         return 0
 
