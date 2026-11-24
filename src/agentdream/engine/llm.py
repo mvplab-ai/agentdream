@@ -72,8 +72,8 @@ OPERATIONS_SCHEMA: dict[str, Any] = {
 
 PHASE_TASKS = {
     "consolidate": ("Task: CONSOLIDATE the memory store. Find duplicates / near-duplicates (merge), stale values "
-                    "that a newer entry supersedes (replace, judge recency by timestamps or later position), and stance "
-                    "reversals between entries (contradiction, kind=temporal). Only use operation types merge, "
+                    "that a newer entry supersedes (replace, judge recency by timestamps or later position), and "
+                    "stance reversals between entries (contradiction, kind=temporal). Only use operation types merge, "
                     "replace, contradiction."),
     "verify": ("Task: VERIFY each memory entry against the transcripts. If transcripts show an entry is wrong "
                "(e.g. the agent repeatedly failed acting on it and later found the real answer), emit a correct "
@@ -678,8 +678,16 @@ def run_llm_phase(ctx: DreamContext, phase: str) -> PhaseResult:
     for call in calls:
         ctx.check_cancel()
         ctx.progress(phase, call.index / max(1, len(calls)))
+        prompt = build_prompt(ctx, phase, call)
+        if ctx.redactor is not None:
+            # final pass over the exact text that leaves the machine (instructions, headings, paths too)
+            before = dict(ctx.redactor.report.counts)
+            prompt = ctx.redactor.redact(prompt)
+            for k, v in ctx.redactor.report.counts.items():
+                if v > before.get(k, 0):
+                    ctx.redaction_counts[k] = ctx.redaction_counts.get(k, 0) + v - before.get(k, 0)
         try:
-            raw = backend.complete(SYSTEM_PROMPT, build_prompt(ctx, phase, call), OPERATIONS_SCHEMA)
+            raw = backend.complete(SYSTEM_PROMPT, prompt, OPERATIONS_SCHEMA)
             ops = extract_operations(parse_json_loose(raw))
         except DreamCanceled:
             raise

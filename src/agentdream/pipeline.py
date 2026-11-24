@@ -42,7 +42,9 @@ def phase_load(ctx: DreamContext) -> None:
 
 
 def make_redactor(cfg: DreamConfig) -> Redactor:
-    return Redactor(emails=cfg.redact_emails, enabled=cfg.redact)
+    return Redactor(emails=cfg.redact_emails, enabled=cfg.redact, extra_patterns=cfg.redact_patterns,
+                    entropy=cfg.redact_entropy, entropy_threshold=cfg.entropy_threshold,
+                    entropy_min_length=cfg.entropy_min_length, cards=cfg.redact_cards)
 
 
 def phase_redact(ctx: DreamContext) -> None:
@@ -58,6 +60,7 @@ def phase_redact(ctx: DreamContext) -> None:
     ctx.redaction_counts = dict(red.report.counts)
     if red.report.total:
         ctx.notices.append(f"redacted {red.report.total} secret(s) before analysis")
+    ctx.redactor = red
 
 
 def phase_limits(ctx: DreamContext) -> None:
@@ -189,8 +192,12 @@ def phase_write(ctx: DreamContext) -> None:
         raise ValueError("no output directory")
     out.mkdir(parents=True, exist_ok=True)
     _focus_notice(ctx)
-    final = materialize(ctx.original_entries, ctx.ops, make_redactor(ctx.config))
+    red = make_redactor(ctx.config)
+    final = materialize(ctx.original_entries, ctx.ops, red)
     ctx.final_entries = final
+    red.report.counts.clear()
+    _sanitize_report_text(ctx, red)
+    _warn_rewritten_secrets(ctx, red)
     store_path = ctx.adapter.output_path(out / "store")
     if (out / "store").exists():
         import shutil
@@ -203,13 +210,15 @@ def phase_write(ctx: DreamContext) -> None:
     ctx.store_path = store_path
     input_path = Path(str(ctx.config.memory))
     # diffs use redacted renderings so reports never echo secrets
-    red = make_redactor(ctx.config)
     diff = store_diff(input_path, store_path, ctx.original_entries, final)
     diff = red.redact(diff)
     sessions = [{"id": t.id, "path": t.source_path, "format": t.format, "messages": len(t.messages)}
                 for t in ctx.transcripts]
+    shown_config = ctx.config.to_dict()
+    if shown_config.get("instructions"):
+        shown_config["instructions"] = red.redact(shown_config["instructions"])
     report = build_report(
-        job_id=ctx.stats.get("job_id", "adhoc"), config=ctx.config.to_dict(), ops=ctx.ops,
+        job_id=ctx.stats.get("job_id", "adhoc"), config=shown_config, ops=ctx.ops,
         original=ctx.original_entries, final=final, transcripts=sessions, warnings=ctx.warnings,
         notices=ctx.notices, redactions=ctx.redaction_counts, diff=diff,
         backend=ctx.backend.describe() if ctx.backend else "deterministic", store_path=str(store_path),
@@ -218,6 +227,38 @@ def phase_write(ctx: DreamContext) -> None:
     ctx.stats["report"] = report
     atomic_write_json(out / "report.json", report)
     atomic_write_text(out / "report.md", render_markdown(report, ctx.ops))
+
+
+def _sanitize_report_text(ctx: DreamContext, red: Redactor) -> None:
+    """Defense in depth: everything a report shows (evidence quotes, before/after, history,
+    summaries) goes through the redactor again, so a custom phase that built evidence from
+    unredacted text still can't leak a secret into report.md / report.json."""
+    if not ctx.config.redact:
+        return
+    for op in ctx.ops:
+        op.summary, op.reason = red.redact(op.summary), red.redact(op.reason)
+        op.before = [red.redact(x) for x in op.before]
+        op.after = [red.redact(x) for x in op.after]
+        op.history = [red.redact(x) for x in op.history]
+        for ev in op.evidence:
+            ev.quote = red.redact(ev.quote)
+    for k, v in red.report.counts.items():  # count anything the second pass caught
+        ctx.redaction_counts[k] = ctx.redaction_counts.get(k, 0) + v
+    red.report.counts.clear()
+
+
+def _warn_rewritten_secrets(ctx: DreamContext, red: Redactor) -> None:
+    """An operation that rewrites an entry containing a secret writes the ``[REDACTED:...]``
+    placeholder (the model never saw the secret). Say so before anyone accepts it."""
+    if not ctx.config.redact:
+        return
+    with_secret = {e.id for e in ctx.original_entries if "[REDACTED:" in red.redact(e.content)}
+    red.report.counts.clear()
+    for op in ctx.ops:
+        hit = [u.id for u in op.upsert if u.id in with_secret and "[REDACTED:" in u.content]
+        if hit:
+            ctx.warn(f"{op.id} rewrites {', '.join(hit)}, which contained a redacted secret; the new text keeps "
+                     "the [REDACTED:...] placeholder - restore the value by hand or exclude this operation")
 
 
 class Pipeline:

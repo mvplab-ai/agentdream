@@ -46,6 +46,11 @@ class DreamConfig:
     # redaction
     redact: bool = True
     redact_emails: bool = False
+    redact_entropy: bool = True
+    entropy_threshold: float = 4.0
+    entropy_min_length: int = 24
+    redact_cards: bool = True
+    redact_patterns: list[str] = field(default_factory=list)
     # heuristics
     insight_min_sessions: int = 2
     max_insights: int = 12
@@ -90,6 +95,7 @@ class DreamContext:
         self.notices: list[str] = []
         self.stats: dict[str, Any] = {}
         self.redaction_counts: dict[str, int] = {}
+        self.redactor: Any = None  # set by the redact phase; LLM prompts get a final pass through it
         self.output_dir: Path | None = None
         self.store_path: Path | None = None
         self.final_entries: list[MemoryEntry] = []

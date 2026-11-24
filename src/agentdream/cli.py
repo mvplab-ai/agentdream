@@ -36,6 +36,12 @@ def _dream_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-chunks", type=int, default=None, help="max model calls per phase (default 64)")
     p.add_argument("--no-redact", action="store_true", help="disable secret redaction (not recommended)")
     p.add_argument("--redact-emails", action="store_true")
+    p.add_argument("--no-redact-entropy", action="store_true",
+                   help="don't redact long random-looking tokens (known secret formats are still redacted)")
+    p.add_argument("--entropy-threshold", type=float, default=None,
+                   help="bits/char for the high-entropy check (default 4.0; lower = more aggressive)")
+    p.add_argument("--redact-pattern", action="append", default=None, metavar="REGEX",
+                   help="extra regex to redact (repeatable)")
     p.add_argument("--apply", action="store_true", help="accept all operations right away (backup is still made)")
     _common_jobs(p)
 
@@ -45,6 +51,8 @@ def _dream_options(a: argparse.Namespace) -> dict:
             "transcript_format": a.transcript_format, "max_sessions": a.max_sessions,
             "max_bytes_per_transcript": a.max_bytes_per_transcript, "max_total_tokens": a.max_total_tokens,
             "on_limit": a.on_limit, "redact": not a.no_redact, "redact_emails": a.redact_emails,
+            "redact_entropy": False if a.no_redact_entropy else None, "entropy_threshold": a.entropy_threshold,
+            "redact_patterns": a.redact_pattern,
             "jobs_dir": a.jobs_dir, "max_chunk_tokens": a.max_chunk_tokens, "chunk_overlap": a.chunk_overlap,
             "max_chunks": a.max_chunks}
     if getattr(a, "out", None):
