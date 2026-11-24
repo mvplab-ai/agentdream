@@ -654,7 +654,7 @@ per phase; chunking adds overlap and per-call scaffolding (~700–750 tokens eac
 | Crash during `accept` | Original store restored (or never moved); `ReviewError` names the backup. |
 | `--out` overlapping the memory store | Job `failed` before anything is written. |
 | Read-only / unwritable output, jobs or target dir | One-line error (`agentdream: error: Permission denied: PATH`), input untouched. |
-
-Every row above, and many more, is a test in `tests/edge/`; see [EDGE_CASES.md](EDGE_CASES.md).
 | Hook can't write its state dir | Error printed to stderr, exit 0; Claude Code is unaffected. |
 | Two dreams for one project at once (hook) | The second worker sees the lock and exits. |
+
+Every row above, and many more, is a test in `tests/edge/`; see [EDGE_CASES.md](EDGE_CASES.md).

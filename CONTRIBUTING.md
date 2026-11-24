@@ -44,7 +44,6 @@ They are never part of CI. What has actually been run live vs mocked is recorded
 
 ## Layout
 
-```
 See the module map in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#module-map). In short:
 
 ```
