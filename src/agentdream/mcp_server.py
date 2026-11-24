@@ -24,15 +24,17 @@ TOOLS: list[dict[str, Any]] = [
      "description": "Consolidate an agent memory store against session transcripts (dry run: writes a NEW store "
                     "+ report for review; the input store is never modified).",
      "inputSchema": {"type": "object", "properties": {
-         "memory": {"type": "string", "description": "Memory store path (markdown folder, JSON/JSONL, SQLite)"},
-         "sessions": {"type": "array", "items": _STR, "description": "Transcript files, dirs or globs"},
+         "memory": {"type": "string", "description": "Memory store path (markdown folder, JSON/JSONL, SQLite); "
+                                                     "default: `memory` from .agentdream.toml"},
+         "sessions": {"type": "array", "items": _STR, "description": "Transcript files, dirs or globs; default: "
+                                                                     "`sessions` from .agentdream.toml"},
          "backend": {"type": "string", "description": "deterministic | anthropic | openai | claude-cli",
                      "default": "deterministic"},
          "model": _STR, "instructions": {"type": "string", "description": "Optional focus for the dream"},
          "out": {"type": "string", "description": "Output directory (default: job dir)"},
          "wait": {"type": "boolean", "default": True,
                   "description": "Wait for completion (false: return a job id and poll dream_status)"}},
-         "required": ["memory", "sessions"]}},
+         "required": []}},
     {"name": "dream_status", "description": "Status of a dream job (pending/running/completed/failed/canceled).",
      "inputSchema": {"type": "object", "properties": {"job_id": _STR}, "required": ["job_id"]}},
     {"name": "accept", "description": "Apply a completed dream to the memory store (backs up the original first). "
@@ -52,8 +54,9 @@ TOOLS: list[dict[str, Any]] = [
 
 
 class MCPServer:
-    def __init__(self, jobs_dir: str | Path | None = None):
+    def __init__(self, jobs_dir: str | Path | None = None, config_path: str | Path | None = None):
         self.jobs_dir = str(jobs_dir) if jobs_dir else None
+        self.config_path = str(config_path) if config_path else None
         self._running: dict[str, Any] = {}
         self.handlers: dict[str, Callable[[dict], Any]] = {
             "dream": self._dream, "dream_status": self._status, "accept": self._accept,
@@ -70,12 +73,19 @@ class MCPServer:
 
     def _dream(self, a: dict) -> Any:
         from .api import dream
+        from .config import resolve
 
-        opts = {k: a[k] for k in ("model", "instructions", "out") if a.get(k)}
-        if self.jobs_dir:
-            opts["jobs_dir"] = self.jobs_dir
+        cli = {k: a.get(k) or None for k in ("memory", "sessions", "backend", "model", "instructions", "out")}
+        cli["jobs_dir"] = self.jobs_dir
+        settings = resolve(cli, config_path=self.config_path)  # tool args > env > config file > defaults
+        opts = dict(settings.dream)
+        memory = opts.pop("memory", None)
+        if not memory:
+            raise ValueError("no memory store: pass `memory` or set it in .agentdream.toml")
+        sessions = opts.pop("sessions", None) or []
+        backend = opts.pop("backend", None) or "deterministic"
         wait = a.get("wait", True)
-        job = dream(a["memory"], a.get("sessions") or [], a.get("backend") or "deterministic", wait=wait, **opts)
+        job = dream(memory, sessions, backend, wait=wait, **opts)
         if not wait:
             self._running[job.id] = job
         out = job.to_dict()

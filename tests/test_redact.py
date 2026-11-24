@@ -246,7 +246,8 @@ def test_nothing_secret_reaches_the_model_or_the_report(tmp_path):
 
 def test_rewriting_an_entry_with_a_secret_is_flagged(tmp_path):
     tok = "gh" + "p_" + rnd(36)
-    mem = write(tmp_path / "m" / "MEMORY.md", f"- The deploy server is north of the gym. Log in with {tok} there.\n").parent
+    note = f"- The deploy server is north of the gym. Log in with {tok} there.\n"
+    mem = write(tmp_path / "m" / "MEMORY.md", note).parent
     s = tmp_path / "s"
     write_jsonl(s / "1.jsonl", [{"role": "assistant", "content": "No deploy server north of the gym."},
                                 {"role": "assistant", "content": "Found the deploy server! It is south of the gym."},

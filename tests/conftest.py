@@ -11,8 +11,15 @@ EXAMPLES = ROOT / "examples"
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """Every test gets its own job store so nothing leaks into the repo."""
+    import os
+
     home = tmp_path / ".agentdream-home"
+    for var in list(os.environ):  # a developer's own AGENTDREAM_* settings must not leak into tests
+        if var.startswith("AGENTDREAM_") and var != "AGENTDREAM_LIVE":
+            monkeypatch.delenv(var)
     monkeypatch.setenv("AGENTDREAM_HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".xdg-config"))  # no user config file
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     return home
