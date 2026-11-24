@@ -137,7 +137,8 @@ def test_live_temporal_a_case(spec, tmp_path):
     s = tmp_path / "s"
     s.mkdir()
     (s / "1.jsonl").write_text("\n".join(json.dumps(m) for m in [
-        {"role": "user", "content": "Actually, maybe Poetry is better. Let's use Poetry for dependency management from now on.",
+        {"role": "user",
+         "content": "Actually, maybe Poetry is better. Let's use Poetry for dependency management from now on.",
          "timestamp": "2026-11-20T10:00:00Z"},
         {"role": "assistant", "content": "Switched the project to Poetry.", "timestamp": "2026-11-20T10:01:00Z"},
     ]) + "\n")
