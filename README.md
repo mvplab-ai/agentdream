@@ -3,8 +3,13 @@
 [![CI](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml/badge.svg)](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10 | 3.11 | 3.12 | 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
+[![GitHub stars](https://img.shields.io/github/stars/systemagents-ai/agentdream?style=flat)](https://github.com/systemagents-ai/agentdream/stargazers)
 
 **Sleep-time memory consolidation ("dreaming") for any agent and any model — local-first, reviewable, zero dependencies.**
+
+![A 25-second terminal highlight: agentdream runs a dry-run dream, shows a cited correction in the report, then applies it on accept. The original store stays unchanged until you accept.](docs/demo.gif)
+
+The GIF is a highlight of a real terminal run with the `claude-cli` backend (your Claude Code login, no API key). The quickstart below uses the bundled example and the deterministic backend, so it works offline with no model.
 
 Agents accumulate memory notes that drift: duplicates pile up, old values go stale, and some notes are
 simply wrong — the agent keeps acting on them and failing. `agentdream` reads your agent's memory store
@@ -24,8 +29,8 @@ your Claude Code login.
 ## 60-second quickstart
 
 ```bash
-pip install "git+https://github.com/systemagents-ai/agentdream"     # not on PyPI yet; Python >= 3.10
-git clone https://github.com/systemagents-ai/agentdream && cd agentdream   # for the example data
+git clone https://github.com/systemagents-ai/agentdream && cd agentdream
+pip install .                        # Python >= 3.10; not on PyPI yet
 
 agentdream dream --memory examples/memory --sessions examples/sessions     # dry run: nothing is changed
 agentdream show <job-id>                 # the report: what changed, why, with transcript citations
@@ -141,6 +146,22 @@ code."*, a recurring-mistake note and a converged `pytest -q` → `git commit -m
 
 The report also contains a unified diff of old vs. new store, and `report.json` has the same data for
 machines. Operation ids are content hashes, so they are stable across re-runs of the same inputs.
+
+## How it compares
+
+agentdream is a **maintenance pass** over a memory store you already have. It is not a new memory
+database, and it is not an agent framework. The tools below are complementary more often than they are
+alternatives.
+
+| | What it is | Where it runs | What it does with memory | Review before write |
+|---|---|---|---|---|
+| **agentdream** | Sleep-time consolidation CLI / library / MCP server | Your machine (stdlib-only; optional local or API model) | Merges duplicates, replaces stale values, corrects notes from transcript evidence with citations, surfaces insights. Never mutates the input store. | Yes: dry-run default, accept / partial accept / discard / restore |
+| **Anthropic Dreams** | Managed sleep-time workflow for Claude Managed Agents | Anthropic's platform | Same *shape* of workflow (memory + transcripts in, new store + report out) | Managed on the platform |
+| **Letta** (formerly MemGPT) | Agent *framework* whose agents edit their own memory | Self-hosted or Letta Cloud | The agent gets tools to manage memory during a run, not a batch consolidation of an existing markdown/JSON/SQLite store | In-agent |
+| **Mem0** | Memory *layer* (extract, store, retrieve) | Open-source and hosted | Adds and retrieves memories for an app; not a cited, reviewable rewrite of a store you already keep | Different model |
+| **Zep** / Graphiti | Temporal knowledge-graph memory service | Self-hosted or hosted | Builds a graph of facts over interactions | Service-side |
+
+agentdream is an independent open-source project, not affiliated with Anthropic, Letta, Mem0, or Zep.
 
 ## Configuration
 
@@ -356,12 +377,15 @@ Claude Code hook (`install-claude-hook`). Both are dry runs unless you opt in to
 * Markdown stores are parsed as one entry per bullet / paragraph (or per file with front matter); exotic
   layouts may be re-rendered more coarsely than you wrote them (only changed blocks are re-rendered).
 * Windows is not covered by CI (the code avoids POSIX-only APIs where possible; file locking uses
-  `msvcrt` there).
+  `msvcrt` there). macOS is in CI as a best-effort job (`continue-on-error`) because hosted macOS
+  runners are often unavailable.
 
 ## Contributing
 
-Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The core stays stdlib-only;
-`pip install -e ".[dev]"`, then `python -m pytest -q`, `ruff check src tests examples` and `mypy`.
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Security reports: [SECURITY.md](SECURITY.md).
+The core stays stdlib-only; `pip install -e ".[dev]"`, then `python -m pytest -q`,
+`ruff check src tests examples` and `mypy`.
 
 ## Credits
 
