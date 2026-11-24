@@ -45,6 +45,67 @@ SQLite database or `stancelog:<path>`; `--sessions` takes transcript files, fold
 `{"role", "content"}` JSONL, Claude Code session files, OpenAI-style message JSON, or plain
 `User: / Assistant:` text — auto-detected).
 
+## Architecture
+
+Entry points share one config and one pipeline. Memory and transcripts are read-only — the input
+store is never modified. The pipeline writes a staged store and a report; nothing is applied until
+you accept, which takes a backup first so you can restore. Full diagrams and the module map:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Static images of the figure below:
+[SVG](docs/architecture.svg) · [PNG](docs/architecture.png).
+
+```mermaid
+flowchart TB
+  subgraph entry["Entry points"]
+    direction LR
+    cli["CLI"]
+    py["Python API"]
+    mcp["MCP server"]
+    sched["Scheduler"]
+    hook["Claude Code hook"]
+    cli ~~~ py ~~~ mcp ~~~ sched ~~~ hook
+  end
+
+  cfg["Config"]
+
+  subgraph sources["Read-only inputs"]
+    direction LR
+    mem["Memory adapters"]
+    original[("Input store never modified")]
+    tx["Transcript loaders"]
+    mem ~~~ original ~~~ tx
+  end
+
+  subgraph pipe["Dream pipeline"]
+    direction TB
+    subgraph prep["Prepare"]
+      direction LR
+      load["load"] --> redact["redact"] --> limits["limits"]
+    end
+    subgraph analyze["Consolidate, verify, insights"]
+      direction LR
+      cons["consolidate"] --> verify["verify"] --> insights["insights"]
+    end
+    write["write"]
+    limits --> cons
+    insights --> write
+  end
+
+  subgraph engines["Engines"]
+    direction LR
+    det["Deterministic"]
+    llm["LLM backends"]
+    det ~~~ llm
+  end
+
+  staged["Staged store and report"] --> review["Accept, discard, or restore"] --> backup["Backup of the target"]
+
+  entry --> cfg
+  cfg --> load
+  sources --> load
+  analyze --> engines
+  write --> staged
+```
+
 ## How it works
 
 A dream is a pipeline of small, replaceable phases:
