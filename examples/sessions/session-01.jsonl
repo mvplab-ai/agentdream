@@ -1,0 +1,6 @@
+{"role": "user", "content": "Your team is hurt. Go heal at the Viridian City PokéCenter.", "timestamp": "2026-03-01T10:00:00Z"}
+{"role": "assistant", "content": "My notes say the PokéCenter is north of the gym. Heading north.", "timestamp": "2026-03-01T10:00:05Z"}
+{"role": "assistant", "content": "Walked north of the gym for 20 steps. No PokéCenter here, only tall grass.", "timestamp": "2026-03-01T10:02:00Z"}
+{"role": "assistant", "content": "Still can't find the PokéCenter north of the gym. Going back to the gym to try again.", "timestamp": "2026-03-01T10:04:00Z"}
+{"role": "user", "content": "Please always use type hints in Python code.", "timestamp": "2026-03-01T10:06:00Z"}
+{"role": "assistant", "content": "Ran `pytest -q` and then `git commit -m 'wip'`.", "timestamp": "2026-03-01T10:07:00Z"}

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentdream"
+version = "0.1.0"
+description = "Local-first sleep-time memory consolidation (\"dreaming\") for any agent and any model."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "systemagents-ai" }]
+keywords = ["agents", "memory", "llm", "consolidation", "dreaming", "sleep-time-compute", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# The core is stdlib-only on purpose.
+dependencies = []
+
+[project.optional-dependencies]
+# All built-in LLM backends use urllib / subprocess, so no SDK is required.
+# The stancelog adapter is optional and imported lazily.
+stancelog = []
+dev = ["pytest>=7"]
+
+[project.scripts]
+agentdream = "agentdream.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/systemagents-ai/agentdream"
+Issues = "https://github.com/systemagents-ai/agentdream/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentdream"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/agentdream", "tests", "examples", "README.md", "LICENSE", "CONTRIBUTING.md", "SPEC.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: hits a real model (claude-cli); skipped unless AGENTDREAM_LIVE=1",
+]

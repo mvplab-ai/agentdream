@@ -6,3 +6,4 @@ __pycache__/
 .agentdream/
 dist/
 build/
+.scratch/

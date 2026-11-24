@@ -1,0 +1,5 @@
+{"type": "summary", "summary": "Dependency tooling discussion"}
+{"type": "user", "timestamp": "2026-03-10T12:00:00Z", "message": {"role": "user", "content": "Poetry 2 fixed the CI slowness. Actually, let's use Poetry for dependency management from now on."}}
+{"type": "assistant", "timestamp": "2026-03-10T12:00:10Z", "message": {"role": "assistant", "content": [{"type": "thinking", "thinking": "internal"}, {"type": "text", "text": "Sounds good, switching the project to Poetry."}, {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "poetry init -n"}}]}}
+{"type": "user", "timestamp": "2026-03-10T12:00:20Z", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Created pyproject.toml"}]}}
+{"type": "user", "timestamp": "2026-03-10T12:01:00Z", "message": {"role": "user", "content": "Don't use Redux for state management, it is overkill here."}}
