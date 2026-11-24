@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .adapters import get_adapter
 from .backends import get_backend
-from .context import DreamCanceled, DreamConfig, DreamContext
+from .context import DreamCanceled, DreamConfig, DreamContext, DreamLimitError
 from .engine import run_analysis_phase
 from .loaders import load_transcripts
 from .models import MemoryEntry, Operation, apply_operations
@@ -24,10 +24,6 @@ from .text import token_set
 from .util import atomic_write_json, atomic_write_text, estimate_tokens, now_iso
 
 Phase = Callable[[DreamContext], None]
-
-
-class DreamLimitError(Exception):
-    pass
 
 
 # ----------------------------------------------------------------- phases
@@ -92,28 +88,35 @@ def phase_limits(ctx: DreamContext) -> None:
         t.metadata["truncated_messages"] = dropped
         ctx.notices.append(msg + f"; truncated to the most recent {len(kept)} message(s) ({dropped} dropped)")
 
-    def total_tokens() -> int:
-        return (sum(estimate_tokens(e.content) for e in ctx.entries) +
-                sum(estimate_tokens(m.content) for t in ctx.transcripts for m in t.messages))
-
-    tok = total_tokens()
+    # running totals (one pass), so truncation is linear even with thousands of sessions
+    mem_tok = sum(estimate_tokens(e.content) for e in ctx.entries)
+    per_t = [sum(estimate_tokens(m.content) for m in t.messages) for t in ctx.transcripts]
+    tok = mem_tok + sum(per_t)
     ctx.stats["estimated_tokens"] = tok
     if tok > cfg.max_total_tokens:
         msg = f"estimated {tok} tokens exceed max_total_tokens={cfg.max_total_tokens}"
         if fail:
             raise DreamLimitError(msg)
         dropped = 0
-        while len(ctx.transcripts) > 1 and total_tokens() > cfg.max_total_tokens:
+        while len(ctx.transcripts) > 1 and tok > cfg.max_total_tokens:
             ctx.transcripts.pop(0)
+            tok -= per_t.pop(0)
             dropped += 1
-        if total_tokens() > cfg.max_total_tokens and ctx.transcripts:
+        trimmed = 0
+        if tok > cfg.max_total_tokens and ctx.transcripts:
             t = ctx.transcripts[0]
-            while len(t.messages) > 1 and total_tokens() > cfg.max_total_tokens:
-                t.messages.pop(0)
-        if total_tokens() > cfg.max_total_tokens:
-            raise DreamLimitError(msg + " even after truncation (the memory store alone is too large)")
-        ctx.notices.append(msg + f"; dropped {dropped} oldest session(s) and truncated to fit")
-        ctx.stats["estimated_tokens"] = total_tokens()
+            while len(t.messages) - trimmed > 1 and tok > cfg.max_total_tokens:
+                tok -= estimate_tokens(t.messages[trimmed].content)
+                trimmed += 1
+            if trimmed:
+                t.messages = t.messages[trimmed:]
+                t.metadata["truncated_messages"] = t.metadata.get("truncated_messages", 0) + trimmed
+        if tok > cfg.max_total_tokens:
+            raise DreamLimitError(msg + " even after truncation (the memory store alone is too large; raise "
+                                        "max_total_tokens)")
+        ctx.notices.append(msg + f"; dropped {dropped} oldest session(s)"
+                           + (f" and {trimmed} oldest message(s) of the next one" if trimmed else "") + " to fit")
+        ctx.stats["estimated_tokens"] = tok
     if len(ctx.transcripts) < cfg.min_sessions:
         raise DreamLimitError(f"need at least {cfg.min_sessions} session(s) after limits, have {len(ctx.transcripts)}")
     ctx._sentences = None

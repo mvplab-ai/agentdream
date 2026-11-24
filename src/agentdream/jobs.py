@@ -84,6 +84,8 @@ class DreamJob:
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._last_progress_save = 0.0
+        self._phase_pos = (0, 1)
 
     # ---------------------------------------------------------------- persistence
     @property
@@ -198,10 +200,19 @@ class DreamJob:
     def done(self) -> bool:
         return self.status in TERMINAL
 
+    #: in-phase progress is persisted (and the on-disk cancel flag polled) at most this often
+    PROGRESS_INTERVAL = 0.25
+
     def _on_progress(self, phase: str, frac: float) -> None:
+        now = time.monotonic()
+        if now - self._last_progress_save < self.PROGRESS_INTERVAL:
+            return
+        self._last_progress_save = now
         if self._file_cancel_flag():
             self._cancel.set()
         self.phase = phase
+        i, total = self._phase_pos
+        self.progress = (i + max(0.0, min(1.0, frac))) / total
         self.save()
 
     def run(self) -> DreamJob:
@@ -229,6 +240,8 @@ class DreamJob:
                 self._cancel.set()
             self.phase = name
             self.progress = i / total
+            self._phase_pos = (i, total)
+            self._last_progress_save = time.monotonic()
             self.save()
 
         try:

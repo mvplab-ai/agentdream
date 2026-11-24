@@ -29,6 +29,11 @@ def _dream_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-bytes-per-transcript", type=int, default=2_000_000)
     p.add_argument("--max-total-tokens", type=int, default=400_000)
     p.add_argument("--on-limit", choices=["truncate", "fail"], default="truncate")
+    p.add_argument("--max-chunk-tokens", type=int, default=None,
+                   help="LLM backends: token budget per model call; larger inputs are chunked (default 60000)")
+    p.add_argument("--chunk-overlap", type=int, default=None,
+                   help="tokens of transcript context repeated between consecutive chunks (default 400)")
+    p.add_argument("--max-chunks", type=int, default=None, help="max model calls per phase (default 64)")
     p.add_argument("--no-redact", action="store_true", help="disable secret redaction (not recommended)")
     p.add_argument("--redact-emails", action="store_true")
     p.add_argument("--apply", action="store_true", help="accept all operations right away (backup is still made)")
@@ -40,7 +45,8 @@ def _dream_options(a: argparse.Namespace) -> dict:
             "transcript_format": a.transcript_format, "max_sessions": a.max_sessions,
             "max_bytes_per_transcript": a.max_bytes_per_transcript, "max_total_tokens": a.max_total_tokens,
             "on_limit": a.on_limit, "redact": not a.no_redact, "redact_emails": a.redact_emails,
-            "jobs_dir": a.jobs_dir}
+            "jobs_dir": a.jobs_dir, "max_chunk_tokens": a.max_chunk_tokens, "chunk_overlap": a.chunk_overlap,
+            "max_chunks": a.max_chunks}
     if getattr(a, "out", None):
         opts["out"] = a.out
     if a.base_url:

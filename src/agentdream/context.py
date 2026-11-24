@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .blocking import TokenIndex
 from .models import MemoryEntry, Operation, Transcript, apply_operations
 from .text import content_tokens, fold, split_sentences
 from .util import parse_timestamp
@@ -15,6 +16,10 @@ from .util import parse_timestamp
 
 class DreamCanceled(Exception):
     pass
+
+
+class DreamLimitError(Exception):
+    """A configured size limit was exceeded and ``on_limit="fail"`` (or truncation could not help)."""
 
 
 @dataclass
@@ -34,6 +39,10 @@ class DreamConfig:
     max_bytes_per_transcript: int = 2_000_000
     max_total_tokens: int = 400_000
     on_limit: str = "truncate"  # truncate | fail
+    # chunking (LLM backends): token budget per model call, transcript overlap, cap on calls per phase
+    max_chunk_tokens: int = 60_000
+    chunk_overlap: int = 400
+    max_chunks: int = 64
     # redaction
     redact: bool = True
     redact_emails: bool = False
@@ -88,6 +97,9 @@ class DreamContext:
         self._progress = progress
         self._cancel = cancel_event
         self._sentences: list[SentenceRec] | None = None
+        self._sentence_index: TokenIndex | None = None
+        self._by_id: tuple[list[MemoryEntry], int, dict[str, MemoryEntry]] | None = None
+        self._op_ids: set[str] = set()
         self.skip_phases: set[str] = set()
 
     # -- control
@@ -105,23 +117,33 @@ class DreamContext:
 
     # -- operations
     def entry(self, entry_id: str) -> MemoryEntry | None:
-        for e in self.entries:
-            if e.id == entry_id:
-                return e
-        return None
+        """Current (working-view) entry by id. O(1): the id index is rebuilt only when
+        ``self.entries`` is replaced (``add_op`` always replaces it) or changes length. Custom
+        phases that overwrite ``ctx.entries[i]`` in place should assign a new list instead."""
+        cached = self._by_id
+        if cached is None or cached[0] is not self.entries or cached[1] != len(self.entries):
+            idx: dict[str, MemoryEntry] = {}
+            for e in self.entries:
+                idx.setdefault(e.id, e)
+            # holding a reference to the list (not its id()) means a recycled id can't alias it
+            cached = self._by_id = (self.entries, len(self.entries), idx)
+        return cached[2].get(entry_id)
 
     def add_op(self, op: Operation) -> Operation:
         deps = {self._producer[t] for t in op.targets + op.remove if t in self._producer}
         deps |= {self._producer[u.id] for u in op.upsert if u.id in self._producer}
         op.depends_on = sorted(set(op.depends_on) | deps)
-        existing = {o.id for o in self.ops}
+        if len(self._op_ids) != len(self.ops):  # ops list was edited by a custom phase
+            self._op_ids = {o.id for o in self.ops}
         base, n = op.id, 2
-        while op.id in existing:
+        while op.id in self._op_ids:
             op.id = f"{base}-{n}"
             n += 1
         self.ops.append(op)
+        self._op_ids.add(op.id)
         if op.changes_store:
-            self.entries = apply_operations(self.entries, [op])
+            # untouched entries are shared, not deep-copied: O(n) per op instead of O(n * entry size)
+            self.entries = apply_operations(self.entries, [op], copy_untouched=False)
             for u in op.upsert:
                 self._producer[u.id] = op.id
         return op
@@ -148,4 +170,12 @@ class DreamContext:
                     out.append(SentenceRec(ti, mi, si, m, s, fold(s), frozenset(content_tokens(s)), t.id, order))
                     order += 1
         self._sentences = out
+        self._sentence_index = None
         return out
+
+    def sentence_index(self) -> TokenIndex:
+        """Inverted index: content token -> ascending positions in :meth:`sentences`."""
+        recs = self.sentences()
+        if self._sentence_index is None or self._sentence_index.size != len(recs):
+            self._sentence_index = TokenIndex(r.toks for r in recs)
+        return self._sentence_index

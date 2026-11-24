@@ -4,6 +4,11 @@ Nothing here is tied to specific test strings: we normalise text, extract
 "claims" (subject / value / polarity) with a handful of generic English
 patterns, and compare them with token-set similarity plus typed value slots
 (directions, numbers, on/off states).
+
+Every helper is a pure function of its string argument, so the expensive ones
+are memoised (bounded LRU caches): the engine asks the same questions about the
+same entries and sentences many times. Returned objects (``Claim``, slot dicts)
+are shared between callers and must be treated as immutable.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from functools import lru_cache
 
 STOPWORDS = frozenset("""
 a an the this that these those it its it's is are was were be been being am do does did done doing
@@ -63,8 +69,14 @@ INTENT_MARKERS = re.compile(
     r"i think|i believe|probably|expect(?:ed|ing)?)\b", re.I)
 
 
+_CACHE = 1 << 16
+
+
+@lru_cache(maxsize=_CACHE)
 def fold(text: str) -> str:
     """Lowercase + strip accents (PokéCenter -> pokecenter) + normalise quotes."""
+    if text.isascii():
+        return text.lower()
     t = unicodedata.normalize("NFKD", text)
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
     t = t.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
@@ -78,6 +90,7 @@ def strip_markup(text: str) -> str:
     return t.strip()
 
 
+@lru_cache(maxsize=_CACHE)
 def strip_dates(text: str) -> str:
     t = _DATE.sub(" ", text)
     t = re.sub(r"[\(\[]\s*[\)\]]", " ", t)
@@ -106,10 +119,20 @@ def stem(tok: str) -> str:
 
 
 def tokens(text: str) -> list[str]:
-    return _TOKEN.findall(fold(strip_dates(text)))
+    return list(_tokens(text))
+
+
+@lru_cache(maxsize=_CACHE)
+def _tokens(text: str) -> tuple[str, ...]:
+    return tuple(_TOKEN.findall(fold(strip_dates(text))))
 
 
 def content_tokens(text: str, keep_negations: bool = False) -> list[str]:
+    return list(_content_tokens(text, keep_negations))
+
+
+@lru_cache(maxsize=_CACHE)
+def _content_tokens(text: str, keep_negations: bool) -> tuple[str, ...]:
     out = []
     for t in tokens(text):
         t = t.strip(".'")
@@ -122,11 +145,12 @@ def content_tokens(text: str, keep_negations: bool = False) -> list[str]:
         if t in STOPWORDS:
             continue
         out.append(stem(t))
-    return out
+    return tuple(out)
 
 
+@lru_cache(maxsize=_CACHE)
 def token_set(text: str) -> frozenset[str]:
-    return frozenset(content_tokens(text))
+    return frozenset(_content_tokens(text, False))
 
 
 def jaccard(a: frozenset[str] | set[str], b: frozenset[str] | set[str]) -> float:
@@ -144,6 +168,7 @@ def containment(a: frozenset[str] | set[str], b: frozenset[str] | set[str]) -> f
     return len(a & b) / len(a)
 
 
+@lru_cache(maxsize=_CACHE)
 def normalize(text: str) -> str:
     t = fold(strip_dates(strip_markup(text)))
     t = re.sub(r"[^a-z0-9#+]+", " ", t)
@@ -154,18 +179,25 @@ def ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, normalize(a), normalize(b)).ratio()
 
 
+@lru_cache(maxsize=_CACHE)
 def numbers(text: str) -> frozenset[str]:
     return frozenset(n.lstrip("v") for n in _NUM.findall(fold(strip_dates(text))))
 
 
+@lru_cache(maxsize=_CACHE)
 def is_negated(text: str) -> bool:
-    toks = set(tokens(text))
+    toks = set(_tokens(text))
     if toks & NEGATIONS:
         return True
     return bool(re.search(r"\b(avoid|stop using|no longer|rejected|reject|deprecated|banned)\b", fold(text)))
 
 
 def split_sentences(text: str) -> list[str]:
+    return list(_split_sentences(text))
+
+
+@lru_cache(maxsize=_CACHE)
+def _split_sentences(text: str) -> tuple[str, ...]:
     parts: list[str] = []
     for line in text.splitlines():
         line = line.strip()
@@ -181,15 +213,16 @@ def split_sentences(text: str) -> list[str]:
             else:
                 merged.append(s)
         parts.extend(merged)
-    return parts
+    return tuple(parts)
 
 
 _ABBREV = re.compile(r"(?:^|\s)(?:mt|mr|mrs|ms|dr|st|sr|jr|vs|no|fig|approx|etc|e\.g|i\.e|inc|ltd|co|rd|ave|"
                      r"[A-Z])\.$", re.I)
 
 
+@lru_cache(maxsize=_CACHE)
 def _slot_scan(text: str) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
-    toks = [t.strip(".'") for t in tokens(text)]
+    toks = [t.strip(".'") for t in _tokens(text)]
     pos: dict[str, set[str]] = {}
     neg: dict[str, set[str]] = {}
     for i, t in enumerate(toks):
@@ -278,6 +311,7 @@ def _clean_object(raw: str) -> str:
     return obj.strip(" '\"`*")
 
 
+@lru_cache(maxsize=_CACHE)
 def _core(subject_text: str) -> frozenset[str]:
     """Head of a noun phrase: tokens before the first preposition."""
     head: list[str] = []
@@ -291,6 +325,7 @@ def _core(subject_text: str) -> frozenset[str]:
     return frozenset(head)
 
 
+@lru_cache(maxsize=_CACHE)
 def parse_claim(sentence: str) -> Claim | None:
     """Extract a preference or fact claim from one sentence, or None."""
     raw = strip_dates(strip_markup(sentence)).strip()
@@ -354,12 +389,17 @@ def parse_claim(sentence: str) -> Claim | None:
 
 
 def claims_in(text: str) -> list[Claim]:
+    return list(_claims_in(text))
+
+
+@lru_cache(maxsize=_CACHE)
+def _claims_in(text: str) -> tuple[Claim, ...]:
     out = []
-    for s in split_sentences(strip_markup(text)):
+    for s in _split_sentences(strip_markup(text)):
         c = parse_claim(s)
         if c:
             out.append(c)
-    return out
+    return tuple(out)
 
 
 def values_conflict(a: Claim, b: Claim) -> bool:

@@ -9,14 +9,22 @@
   weight the evidence. Corrections cite ``file:line`` + quote.
 * insights: frequency counting across sessions for recurring mistakes,
   repeated preferences, preference reversals and converged command workflows.
+
+Scaling: no step compares all pairs. Candidate pairs come from exact blocking
+(:mod:`agentdream.blocking` - prefix filtering for Jaccard thresholds, inverted
+indexes for containment), transcript sentences are reached through a token ->
+sentence index, and claim lookups use per-context indexes. Results are identical
+to the all-pairs formulation; only the work is skipped.
 """
 
 from __future__ import annotations
 
+import heapq
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 
+from ..blocking import TokenIndex, similar_pairs
 from ..context import DreamContext, SentenceRec
 from ..models import Evidence, MemoryEntry, Operation, stable_hash
 from ..text import (
@@ -167,15 +175,27 @@ def _merge_duplicates(ctx: DreamContext) -> None:
     entries = list(ctx.entries)
     n = len(entries)
     toks = [token_set(e.content) for e in entries]
+    # Every duplicate rule needs jaccard >= 0.5 except exact normalised equality, so prefix
+    # filtering at 0.5 plus normalised-text buckets yields every pair that can match.
+    cand = similar_pairs(toks, 0.5)
+    buckets: dict[str, list[int]] = defaultdict(list)
+    for i, e in enumerate(entries):
+        key = normalize(e.content)
+        if key:
+            for j in buckets[key]:
+                cand.add((j, i))
+            buckets[key].append(i)
     pairs = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            if not toks[i] or not toks[j]:
-                continue
-            if len(toks[i] & toks[j]) == 0:
-                continue
-            if _is_duplicate(entries[i], entries[j]):
-                pairs.append((i, j))
+    keys = [normalize(e.content) for e in entries]
+    for i, j in sorted(cand):
+        shared = len(toks[i] & toks[j])
+        if not shared:
+            continue
+        # cheap exact pre-check: below 0.5 only identical normalised text can still be a duplicate
+        if shared / (len(toks[i]) + len(toks[j]) - shared) < 0.5 and keys[i] != keys[j]:
+            continue
+        if _is_duplicate(entries[i], entries[j]):
+            pairs.append((i, j))
     for group in _components(n, pairs):
         members = [entries[i] for i in group]
         survivor = max(members, key=lambda e: (DreamContext.recency_key(e), len(e.content)))
@@ -209,21 +229,16 @@ def _memory_conflicts(ctx: DreamContext) -> None:
     entries = list(ctx.entries)
     claims = [_main_claim(e) for e in entries]
     pref_pairs, fact_pairs = [], []
-    for i in range(len(entries)):
-        ci = claims[i]
-        if ci is None:
+    for i, j in _subject_candidates(claims):
+        ci, cj = claims[i], claims[j]
+        if ci is None or cj is None or ci.kind != cj.kind or not ci.same_subject(cj):
             continue
-        for j in range(i + 1, len(entries)):
-            cj = claims[j]
-            if cj is None or ci.kind != cj.kind or not ci.same_subject(cj):
-                continue
-            if ci.kind == "preference":
-                if ci.polarity != cj.polarity:
-                    pref_pairs.append((i, j))
-            else:
-                # same stance + different value, or opposite stance + same value
-                if (ci.polarity == cj.polarity) == values_conflict(ci, cj):
-                    fact_pairs.append((i, j))
+        if ci.kind == "preference":
+            if ci.polarity != cj.polarity:
+                pref_pairs.append((i, j))
+        # facts: same stance + different value, or opposite stance + same value
+        elif (ci.polarity == cj.polarity) == values_conflict(ci, cj):
+            fact_pairs.append((i, j))
     used: set[int] = set()
     for group in _components(len(entries), pref_pairs):
         group = [g for g in group if g not in used]
@@ -289,6 +304,23 @@ def _memory_conflicts(ctx: DreamContext) -> None:
         ctx.add_op(op)
 
 
+def _subject_candidates(claims: list[Claim | None]) -> list[tuple[int, int]]:
+    """Index pairs (i < j) whose claims can satisfy ``claims[i].same_subject(claims[j])``.
+
+    ``same_subject`` holds only when the subjects are equal, have jaccard >= 0.5, or (facts)
+    ``core_i`` is a subset of ``subject_j``; prefix filtering covers the first two, an inverted
+    index over subjects the third."""
+    subjects = [c.subject if c else frozenset() for c in claims]
+    cand = similar_pairs(subjects, 0.5)
+    index = TokenIndex(subjects)
+    for i, c in enumerate(claims):
+        if c is not None and c.kind == "fact" and c.subject_core:
+            for j in index.with_all(c.subject_core):
+                if j > i:
+                    cand.add((i, j))
+    return sorted(cand)
+
+
 # ============================================================== verify
 
 def _mentions(claim: Claim, rec: SentenceRec) -> bool:
@@ -297,8 +329,26 @@ def _mentions(claim: Claim, rec: SentenceRec) -> bool:
     return len(claim.subject) >= 2 and containment(claim.subject, rec.toks) >= 0.67
 
 
-def _sentence_windows(ctx: DreamContext, claim: Claim, rivals: list[Claim]):
-    """Yield (rec, prev_rec_same_message_or_None, via_pronoun) for sentences about ``claim``."""
+def _mention_positions(ctx: DreamContext, claim: Claim) -> set[int]:
+    """Positions of sentences for which :func:`_mentions` is true, via the sentence index."""
+    index = ctx.sentence_index()
+    out = index.with_all(claim.subject_core) if claim.subject_core else set()
+    n = len(claim.subject)
+    if n >= 2:
+        for pos, c in index.overlap_counts(claim.subject).items():
+            if c / n >= 0.67:
+                out.add(pos)
+    return out
+
+
+def _sentence_windows(ctx: DreamContext, claim: Claim, rivals: list[Claim]
+                      ) -> Iterator[tuple[SentenceRec, SentenceRec | None, bool]]:
+    """Yield (rec, prev_rec_same_message_or_None, via_pronoun) for sentences about ``claim``.
+
+    Semantically a left-to-right scan over every transcript sentence; only sentences that can
+    matter are visited: those mentioning the subject, those carrying a scoping qualifier (to
+    track which of several same-named things is "active"), and pronoun continuations
+    ("It is south of ...") right after a visited mention."""
     recs = ctx.sentences()
     qualifiers = claim.subject - claim.subject_core
     rival_quals = [r.subject - r.subject_core for r in rivals]
@@ -306,9 +356,19 @@ def _sentence_windows(ctx: DreamContext, claim: Claim, rivals: list[Claim]):
     self_d = qualifiers - all_rival
     rival_d = [q - qualifiers for q in rival_quals]
     active: dict[int, str] = {}  # transcript index -> "self" / "rival" (which qualifier was seen last)
-    prev: SentenceRec | None = None
-    prev_mentioned = False
-    for rec in recs:
+    mentioned_at = _mention_positions(ctx, claim)
+    heap = list(mentioned_at)
+    if rivals:
+        heap.extend(ctx.sentence_index().with_any(self_d.union(*rival_d)))
+    heapq.heapify(heap)
+    seen: set[int] = set()
+    hit: set[int] = set()  # positions that were a mention or a pronoun continuation
+    while heap:
+        k = heapq.heappop(heap)
+        if k in seen:
+            continue
+        seen.add(k)
+        rec = recs[k]
         if rivals:
             self_hit = bool(self_d & rec.toks)
             rival_hit = any(rd & rec.toks for rd in rival_d)
@@ -316,28 +376,42 @@ def _sentence_windows(ctx: DreamContext, claim: Claim, rivals: list[Claim]):
                 active[rec.t_index] = "self"
             elif rival_hit and not self_hit:
                 active[rec.t_index] = "rival"
+        prev = recs[k - 1] if k > 0 else None
         same_msg_prev = prev if (prev is not None and prev.t_index == rec.t_index and
                                  prev.m_index == rec.m_index) else None
-        mentioned = _mentions(claim, rec)
-        pronoun = (not mentioned and same_msg_prev is not None and prev_mentioned
+        mentioned = k in mentioned_at
+        pronoun = (not mentioned and same_msg_prev is not None and (k - 1) in hit
                    and bool(_PRONOUN_START.match(rec.text.strip())))
         ok_scope = not rivals or active.get(rec.t_index) == "self" or bool(self_d and self_d <= rec.toks)
-        if (mentioned or pronoun) and ok_scope:
-            yield rec, same_msg_prev, pronoun
-        prev = rec
-        prev_mentioned = mentioned or pronoun
+        if mentioned or pronoun:
+            hit.add(k)
+            if k + 1 < len(recs):
+                heapq.heappush(heap, k + 1)
+            if ok_scope:
+                yield rec, same_msg_prev, pronoun
+
+
+def _claim_index(ctx: DreamContext) -> dict[tuple[str, frozenset[str]], list[tuple[str, Claim]]]:
+    """(kind, subject_core) -> [(entry id, claim)] over the current working entries (cached until
+    ``ctx.entries`` is replaced)."""
+    cached = getattr(ctx, "_claim_index_cache", None)
+    if cached is not None and cached[0] is ctx.entries and cached[1] == len(ctx.entries):
+        return cached[2]
+    idx: dict[tuple[str, frozenset[str]], list[tuple[str, Claim]]] = defaultdict(list)
+    for e in ctx.entries:
+        for c in claims_in(e.content):
+            if c.subject_core:
+                idx[(c.kind, c.subject_core)].append((e.id, c))
+    ctx._claim_index_cache = (ctx.entries, len(ctx.entries), idx)  # type: ignore[attr-defined]
+    return idx
 
 
 def _rivals(ctx: DreamContext, entry: MemoryEntry, claim: Claim) -> list[Claim]:
-    out = []
-    for e in ctx.entries:
-        if e.id == entry.id:
-            continue
-        for c in claims_in(e.content):
-            if c.kind == claim.kind and c.subject_core and c.subject_core == claim.subject_core \
-                    and c.subject != claim.subject:
-                out.append(c)
-    return out
+    """Claims in *other* entries about a same-named but differently qualified subject."""
+    if not claim.subject_core:
+        return []
+    return [c for eid, c in _claim_index(ctx).get((claim.kind, claim.subject_core), ())
+            if eid != entry.id and c.subject != claim.subject]
 
 
 def verify(ctx: DreamContext) -> None:
@@ -512,11 +586,20 @@ def _pref_claims(ctx: DreamContext) -> list[tuple[SentenceRec, Claim]]:
             continue
         out.append((rec, c))
     ctx._pref_cache = out  # type: ignore[attr-defined]
+    ctx._pref_index = TokenIndex(c.subject for _r, c in out)  # type: ignore[attr-defined]
     return out
 
 
+def _pref_claims_about(ctx: DreamContext, claim: Claim) -> list[tuple[SentenceRec, Claim]]:
+    """Transcript preference statements with the same subject as ``claim``, in transcript order.
+    (Preference subjects only match when they share a token, so the index finds them all.)"""
+    stmts = _pref_claims(ctx)
+    index: TokenIndex = ctx._pref_index  # type: ignore[attr-defined]
+    return [stmts[i] for i in sorted(index.with_any(claim.subject)) if stmts[i][1].same_subject(claim)]
+
+
 def _verify_preference(ctx: DreamContext, entry: MemoryEntry, claim: Claim) -> bool:
-    stmts = [(rec, c) for rec, c in _pref_claims(ctx) if c.same_subject(claim)]
+    stmts = _pref_claims_about(ctx, claim)
     if not stmts:
         return False
     stmts.sort(key=lambda rc: rc[0].order)
@@ -603,13 +686,25 @@ _KNOWN_CLI = frozenset({"git", "npm", "npx", "pnpm", "yarn", "pip", "pip3", "pyt
                         "vitest", "claude", "agentdream", "ls", "cd", "curl", "gh"})
 
 
+def _entry_token_index(ctx: DreamContext) -> tuple[TokenIndex, list[frozenset[str]]]:
+    cached = getattr(ctx, "_entry_tok_cache", None)
+    if cached is not None and cached[0] is ctx.entries and cached[1] == len(ctx.entries):
+        return cached[2], cached[3]
+    sets = [token_set(e.content) for e in ctx.entries]
+    index = TokenIndex(sets)
+    ctx._entry_tok_cache = (ctx.entries, len(ctx.entries), index, sets)  # type: ignore[attr-defined]
+    return index, sets
+
+
 def _already_known(ctx: DreamContext, text: str) -> bool:
+    """Is ``text`` already (nearly) in memory? jaccard >= 0.5, or >= 80% of its tokens in one entry."""
     t = token_set(text)
     if not t:
         return True
-    for e in ctx.entries:
-        et = token_set(e.content)
-        if jaccard(t, et) >= 0.5 or (len(t) >= 3 and containment(t, et) >= 0.8):
+    index, sets = _entry_token_index(ctx)
+    for pos, shared in index.overlap_counts(t).items():
+        union = len(t) + len(sets[pos]) - shared
+        if shared / union >= 0.5 or (len(t) >= 3 and shared / len(t) >= 0.8):
             return True
     return False
 
@@ -639,15 +734,19 @@ def insights(ctx: DreamContext) -> None:
 
 def _preference_insights(ctx: DreamContext, budget: list[int]) -> None:
     mem_claims = [c for e in ctx.entries for c in claims_in(e.content) if c.kind == "preference"]
-    stmts = [(r, c) for r, c in _pref_claims(ctx) if not any(c.same_subject(m) for m in mem_claims)]
+    mem_index = TokenIndex(m.subject for m in mem_claims)
+    stmts = [(r, c) for r, c in _pref_claims(ctx)
+             if not any(c.same_subject(mem_claims[k]) for k in sorted(mem_index.with_any(c.subject)))]
     clusters: list[list[tuple[SentenceRec, Claim]]] = []
+    heads = TokenIndex()  # cluster k's head subject at position k
     for rc in stmts:
-        for cl in clusters:
-            if cl[0][1].same_subject(rc[1]):
-                cl.append(rc)
+        for k in sorted(heads.with_any(rc[1].subject)):
+            if clusters[k][0][1].same_subject(rc[1]):
+                clusters[k].append(rc)
                 break
         else:
             clusters.append([rc])
+            heads.add(rc[1].subject)
     for cl in clusters:
         if budget[0] <= 0:
             return
@@ -709,15 +808,18 @@ def _mistake_insights(ctx: DreamContext, budget: list[int]) -> None:
             continue
         cands.append((rec, sig))
     clusters: list[dict] = []
+    cores = TokenIndex()  # cluster k's (fixed) core at position k
     for rec, sig in cands:
         best, best_j = None, 0.0
-        for cl in clusters:
+        for k in sorted(cores.with_any(sig)):  # clusters sharing no token can never qualify
+            cl = clusters[k]
             j = jaccard(sig, cl["core"])
             shared = len(sig & cl["core"])
             if (j >= 0.4 or shared >= 3) and j >= best_j:
                 best, best_j = cl, j
         if best is None:
             clusters.append({"core": sig, "members": [(rec, sig)], "counts": Counter(sig)})
+            cores.add(sig)
         else:
             best["members"].append((rec, sig))
             best["counts"].update(sig)

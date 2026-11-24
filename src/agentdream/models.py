@@ -181,14 +181,19 @@ class Operation:
         return f"{type_}-{stable_hash(type_, sorted(targets), list(after), length=8)}"
 
 
-def apply_operations(entries: list[MemoryEntry], ops: Iterable[Operation]) -> list[MemoryEntry]:
-    """Return a new list of entries with ``ops`` applied in order. Never mutates input."""
+def apply_operations(entries: list[MemoryEntry], ops: Iterable[Operation], *,
+                     copy_untouched: bool = True) -> list[MemoryEntry]:
+    """Return a new list of entries with ``ops`` applied in order. Never mutates input.
+
+    With ``copy_untouched=False`` entries that no operation touches are shared with
+    the input list instead of deep-copied (callers must not mutate them in place).
+    """
     order: list[str] = []
     by_id: dict[str, MemoryEntry] = {}
     for e in entries:
         if e.id not in by_id:
             order.append(e.id)
-        by_id[e.id] = e.copy()
+        by_id[e.id] = e.copy() if copy_untouched else e
     for op in ops:
         for rid in op.remove:
             by_id.pop(rid, None)
