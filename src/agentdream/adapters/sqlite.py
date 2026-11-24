@@ -13,6 +13,7 @@ import json
 import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from ..models import MemoryEntry
 from .base import AdapterError, MemoryAdapter
@@ -29,7 +30,7 @@ class SQLiteAdapter(MemoryAdapter):
     name = "sqlite"
     single_file = True
 
-    def __init__(self, path, table: str | None = None, **options):
+    def __init__(self, path: str | Path, table: str | None = None, **options: Any):
         super().__init__(path, **options)
         self.table = table
 
@@ -89,7 +90,7 @@ class SQLiteAdapter(MemoryAdapter):
             ))
         return entries
 
-    def write(self, entries: list[MemoryEntry], dest) -> Path:
+    def write(self, entries: list[MemoryEntry], dest: str | Path) -> Path:
         dest = Path(dest)
         self._check_dest(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)

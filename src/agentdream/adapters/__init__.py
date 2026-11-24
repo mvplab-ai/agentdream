@@ -11,6 +11,7 @@ or via the ``agentdream.adapters`` entry-point group in their package metadata.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from .base import AdapterError, MemoryAdapter
 from .jsonstore import JSONAdapter
@@ -80,7 +81,7 @@ def available_adapters() -> list[str]:
     return list(_REGISTRY)
 
 
-def get_adapter(path: str | Path, format: str | None = None, **options) -> MemoryAdapter:
+def get_adapter(path: str | Path, format: str | None = None, **options: Any) -> MemoryAdapter:
     """Return an adapter instance for ``path``, auto-detecting the format when not given."""
     _load_entry_points()
     if format:

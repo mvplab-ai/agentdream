@@ -212,7 +212,9 @@ def test_lock_held_by_another_process(tmp_path):
     finally:
         proc.kill()
         proc.wait()
-    assert ch.FileLock(lockfile).acquire(timeout=2)  # released by the OS when the holder died
+    relock = ch.FileLock(lockfile)
+    assert relock.acquire(timeout=2)  # released by the OS when the holder died
+    relock.release()
 
 
 # ------------------------------------------------------------------ worker end to end

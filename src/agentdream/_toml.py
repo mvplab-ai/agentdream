@@ -170,7 +170,7 @@ class _Parser:
 
     def basic_string(self) -> str:
         self.advance()  # opening quote
-        out = []
+        out: list[str] = []
         while True:
             ch = self.peek()
             if ch in ("", "\n"):
@@ -202,7 +202,7 @@ class _Parser:
         self.advance(3)
         if self.peek() == "\n":
             self.advance()
-        out = []
+        out: list[str] = []
         while True:
             if self.i >= len(self.s):
                 raise self.err("unterminated multi-line string")

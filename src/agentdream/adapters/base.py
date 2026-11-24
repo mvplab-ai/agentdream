@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from ..models import MemoryEntry
 
@@ -24,7 +25,7 @@ class MemoryAdapter(ABC):
     #: True when the store is a single file (json/sqlite) rather than a folder.
     single_file: bool = False
 
-    def __init__(self, path: str | Path, **options):
+    def __init__(self, path: str | Path, **options: Any):
         self.path = Path(path) if not isinstance(path, Path) else path
         self.options = options
 

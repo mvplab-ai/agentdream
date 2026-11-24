@@ -5,11 +5,14 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .backends import LLMBackend
 from .context import DreamConfig
 from .jobs import DreamJob
+
+if TYPE_CHECKING:
+    from .pipeline import Pipeline
 
 
 def _sessions_list(sessions: Iterable[str | os.PathLike] | str | os.PathLike | None) -> list[str]:
@@ -20,7 +23,11 @@ def _sessions_list(sessions: Iterable[str | os.PathLike] | str | os.PathLike | N
     return [str(s) for s in sessions]
 
 
-def make_config(memory: str | os.PathLike, sessions=None, backend: str | LLMBackend = "deterministic",
+Sessions = Iterable[str | os.PathLike[str]] | str | os.PathLike[str] | None
+
+
+def make_config(memory: str | os.PathLike[str], sessions: Sessions = None,
+                backend: str | LLMBackend = "deterministic",
                 **options: Any) -> DreamConfig:
     known = set(DreamConfig.__dataclass_fields__)
     unknown = {k: v for k, v in options.items() if k not in known}
@@ -39,8 +46,8 @@ def make_config(memory: str | os.PathLike, sessions=None, backend: str | LLMBack
     return DreamConfig(memory=mem, sessions=_sessions_list(sessions), backend=name, **opts)
 
 
-def dream(memory: str | os.PathLike, sessions=None, backend: str | LLMBackend = "deterministic", *,
-          wait: bool = True, apply: bool = False, pipeline=None, **options: Any) -> DreamJob:
+def dream(memory: str | os.PathLike[str], sessions: Sessions = None, backend: str | LLMBackend = "deterministic",
+          *, wait: bool = True, apply: bool = False, pipeline: Pipeline | None = None, **options: Any) -> DreamJob:
     """Run a dream. Dry-run by default: produces a new store + report in a staging dir.
 
     ``dream(memory="./mem", sessions=["./logs"]).report`` -> report dict.
@@ -61,5 +68,6 @@ def dream(memory: str | os.PathLike, sessions=None, backend: str | LLMBackend = 
     return job
 
 
-def dream_async(memory, sessions=None, backend="deterministic", **options) -> DreamJob:
+def dream_async(memory: str | os.PathLike[str], sessions: Sessions = None,
+                backend: str | LLMBackend = "deterministic", **options: Any) -> DreamJob:
     return dream(memory, sessions, backend, wait=False, **options)

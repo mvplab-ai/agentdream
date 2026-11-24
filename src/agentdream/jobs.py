@@ -15,11 +15,18 @@ import threading
 import time
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .context import DreamCanceled, DreamConfig
 from .models import MemoryEntry, Operation
 from .util import atomic_write_json, hash_path, now_iso
+
+if TYPE_CHECKING:
+    from .backends import LLMBackend
+    from .pipeline import Pipeline
+
+# DreamJob defines a classmethod named ``list``; annotations inside the class use this alias
+List = list
 
 STATUSES = ("pending", "running", "completed", "failed", "canceled")
 TERMINAL = ("completed", "failed", "canceled")
@@ -55,8 +62,8 @@ class JobNotFound(Exception):
 
 
 class DreamJob:
-    def __init__(self, config: DreamConfig, job_id: str | None = None, jobs_dir: str | Path | None = None,
-                 pipeline=None, backend=None):
+    def __init__(self, config: DreamConfig, job_id: str | None = None, jobs_dir: str | os.PathLike[str] | None = None,
+                 pipeline: Pipeline | None = None, backend: LLMBackend | None = None):
         self.config = config
         self.id = job_id or _new_id()
         self.jobs_dir = Path(jobs_dir or config.jobs_dir or default_jobs_dir())
@@ -120,7 +127,7 @@ class DreamJob:
             atomic_write_json(self.path, self.to_dict())
 
     @classmethod
-    def load(cls, job_id: str, jobs_dir: str | Path | None = None) -> DreamJob:
+    def load(cls, job_id: str, jobs_dir: str | os.PathLike[str] | None = None) -> DreamJob:
         jd = Path(jobs_dir or default_jobs_dir())
         p = jd / job_id / "job.json"
         if not p.exists():
@@ -148,7 +155,7 @@ class DreamJob:
         return job
 
     @classmethod
-    def list(cls, jobs_dir: str | Path | None = None) -> list[DreamJob]:
+    def list(cls, jobs_dir: str | os.PathLike[str] | None = None) -> List[DreamJob]:
         jd = Path(jobs_dir or default_jobs_dir())
         if not jd.exists():
             return []
@@ -285,13 +292,13 @@ class DreamJob:
         return p.read_text(encoding="utf-8")
 
     @property
-    def operations(self) -> list[Operation]:
+    def operations(self) -> List[Operation]:
         p = self.dir / "operations.json"
         if not p.exists():
             return []
         return [Operation.from_dict(d) for d in json.loads(p.read_text(encoding="utf-8"))]
 
-    def snapshot(self) -> list[MemoryEntry]:
+    def snapshot(self) -> List[MemoryEntry]:
         p = self.dir / "snapshot.json"
         return [MemoryEntry.from_dict(d) for d in json.loads(p.read_text(encoding="utf-8"))]
 

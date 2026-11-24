@@ -75,7 +75,7 @@ def _obj_from_entry(e: MemoryEntry) -> Any:
 class JSONAdapter(MemoryAdapter):
     name = "json"
 
-    def __init__(self, path, **options):
+    def __init__(self, path: str | Path, **options: Any):
         super().__init__(path, **options)
         self.single_file = self.path.is_file() or self.path.suffix.lower() in (".json", ".jsonl")
         self._shapes: dict[str, dict[str, Any]] = {}
@@ -132,7 +132,7 @@ class JSONAdapter(MemoryAdapter):
             e.metadata["_order"] = i
         return entries
 
-    def write(self, entries: list[MemoryEntry], dest) -> Path:
+    def write(self, entries: list[MemoryEntry], dest: str | Path) -> Path:
         dest = Path(dest)
         self._check_dest(dest)
         if not self._shapes:

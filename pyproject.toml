@@ -60,7 +60,8 @@ source = ["agentdream"]
 branch = false
 
 [tool.coverage.report]
-fail_under = 85
+# measured ~97% locally (3.13 + stancelog); a margin for platform-specific branches
+fail_under = 94
 show_missing = true
 skip_covered = false
 exclude_also = [
@@ -91,3 +92,21 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["agentdream"]
 known-local-folder = ["conftest", "synth"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/agentdream"]
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+warn_return_any = false
+disallow_incomplete_defs = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+# Python 3.10 fallback for tomllib; optional
+module = ["tomli"]
+ignore_missing_imports = true

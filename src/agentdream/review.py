@@ -16,6 +16,9 @@ from .models import Operation
 from .pipeline import make_redactor, materialize
 from .util import copy_path, hash_path, now_iso, remove_path
 
+#: operation ids: a list, or a comma-separated string ("op1,op2"); unique prefixes are accepted
+Selection = Iterable[str] | str | None
+
 
 class ReviewError(Exception):
     pass
@@ -39,7 +42,7 @@ def _split(v: Iterable[str] | str | None) -> list[str]:
         return []
     if isinstance(v, str):
         v = [v]
-    out = []
+    out: list[str] = []
     for item in v:
         out.extend(x.strip() for x in str(item).split(",") if x.strip())
     return out
@@ -60,7 +63,8 @@ def _match_ids(ops: list[Operation], wanted: list[str]) -> list[str]:
     return out
 
 
-def select_operations(ops: list[Operation], only=None, exclude=None) -> tuple[list[Operation], list[str]]:
+def select_operations(ops: list[Operation], only: Selection = None, exclude: Selection = None
+                      ) -> tuple[list[Operation], list[str]]:
     """Return (selected ops in original order, warnings). Dependencies are pulled in for --only and
     dependents are dropped for --exclude so the result is always consistent."""
     warnings: list[str] = []
@@ -96,8 +100,9 @@ def select_operations(ops: list[Operation], only=None, exclude=None) -> tuple[li
     return [o for o in ops if o.id in chosen], warnings
 
 
-def accept(job: DreamJob | str, only=None, exclude=None, to: str | os.PathLike | None = None,
-           backup: bool = True, force: bool = False, jobs_dir=None) -> AcceptResult:
+def accept(job: DreamJob | str, only: Selection = None, exclude: Selection = None,
+           to: str | os.PathLike[str] | None = None, backup: bool = True, force: bool = False,
+           jobs_dir: str | os.PathLike[str] | None = None) -> AcceptResult:
     if isinstance(job, str):
         job = DreamJob.load(job, jobs_dir)
     if job.status != "completed":
@@ -156,7 +161,7 @@ def accept(job: DreamJob | str, only=None, exclude=None, to: str | os.PathLike |
     return AcceptResult(job.id, applied, skipped, str(target), backup_path, warnings)
 
 
-def discard(job: DreamJob | str, jobs_dir=None) -> DreamJob:
+def discard(job: DreamJob | str, jobs_dir: str | os.PathLike[str] | None = None) -> DreamJob:
     if isinstance(job, str):
         job = DreamJob.load(job, jobs_dir)
     if job.review in ("accepted", "partially_accepted"):

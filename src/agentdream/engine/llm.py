@@ -158,7 +158,8 @@ def parse_json_loose(text: str) -> Any:
     raise ValueError(f"could not parse JSON from model output: {shorten(t, 120)!r}")
 
 
-def extract_operations(data: Any) -> list[dict]:
+def extract_operations(data: Any) -> list[dict[str, Any]]:
+    items: Any
     if isinstance(data, list):
         items = data
     elif isinstance(data, dict):

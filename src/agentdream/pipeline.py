@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .adapters import get_adapter
-from .backends import get_backend
+from .backends import LLMBackend, get_backend
 from .context import DreamCanceled, DreamConfig, DreamContext, DreamLimitError
 from .engine import run_analysis_phase
 from .loaders import load_transcripts
@@ -306,8 +306,9 @@ class Pipeline:
 
 
 def run_dream(config: DreamConfig, output_dir: str | Path, *, pipeline: Pipeline | None = None,
-              backend=None, progress=None, cancel_event: threading.Event | None = None,
-              on_phase=None, job_id: str = "adhoc", created_at: str | None = None) -> DreamContext:
+              backend: LLMBackend | None = None, progress: Callable[[str, float], None] | None = None,
+              cancel_event: threading.Event | None = None, on_phase: Callable[[str, int, int], None] | None = None,
+              job_id: str = "adhoc", created_at: str | None = None) -> DreamContext:
     be = backend or get_backend(config.backend, config.model, **(config.backend_options or {}))
     ctx = DreamContext(config, be, progress=progress, cancel_event=cancel_event)
     ctx.output_dir = Path(output_dir)

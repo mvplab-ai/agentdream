@@ -64,7 +64,7 @@ class MCPServer:
         }
 
     # ------------------------------------------------------------ tools
-    def _load(self, job_id: str):
+    def _load(self, job_id: str) -> Any:
         from .jobs import DreamJob
 
         if job_id in self._running:
@@ -152,7 +152,7 @@ class MCPServer:
             return ok({"tools": TOOLS})
         if method == "tools/call":
             params = req.get("params") or {}
-            name = params.get("name")
+            name = str(params.get("name") or "")
             handler = self.handlers.get(name)
             if handler is None:
                 return err(-32602, f"unknown tool: {name}")

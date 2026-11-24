@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 from functools import lru_cache
 
@@ -85,7 +85,10 @@ def fold(text: str) -> str:
 
 def strip_markup(text: str) -> str:
     t = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?", "", text)
-    t = re.sub(r"[*_`]{1,3}", "", t)
+    # emphasis markers only: **bold**, *it*, __bold__, _it_ - never the "_" inside snake_case identifiers
+    t = re.sub(r"(\*{1,3})(?=\S)(.+?)(?<=\S)\1", r"\2", t)
+    t = re.sub(r"(?<![\w])(_{1,3})(?=\S)(.+?)(?<=\S)\1(?![\w])", r"\2", t)
+    t = t.replace("`", "")
     t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
     return t.strip()
 
@@ -300,6 +303,12 @@ class Claim:
                 jaccard(self.subject, other.subject) >= 0.5 and bool(self.subject_core & other.subject_core))
         if self.subject_core and other.subject_core and not (self.subject_core & other.subject_core):
             return False
+        # "the PokéCenter in Viridian City" vs "the PokéCenter in Pewter City": same head noun, but each has a
+        # qualifier the other lacks -> two different things, not two values of one thing
+        own = (self.subject - self.subject_core) - other.subject
+        theirs = (other.subject - other.subject_core) - self.subject
+        if own and theirs:
+            return False
         return jaccard(self.subject, other.subject) >= 0.6 or (
             bool(self.subject_core) and self.subject_core <= other.subject and
             containment(self.subject, other.subject) >= 0.5)
@@ -335,6 +344,14 @@ def parse_claim(sentence: str) -> Claim | None:
     text = re.sub(r"^(?:we|i|you|the team|team)\s+(?=(?:should|must|do|don't|dont|never|always|prefer|use|rejected|"
                   r"avoid|stopped|switched|chose|decided|will|won't)\b)", "", text)
     text = re.sub(r"^(?:decided to|decided against)\s+", lambda m: "use " if "to" in m.group(0) else "avoid ", text)
+
+    # "Confirmed: the staging DB is X" / "Checked the config: ..." -> parse the part after the label
+    # (but keep "port: 8080"-style key/value facts, whose remainder is not a claim by itself)
+    lab = re.match(r"^([^:\n]{1,40}):\s+(.+)$", text)
+    if lab and not re.search(r"\d", lab.group(1)):
+        inner = parse_claim(lab.group(2))
+        if inner is not None:
+            return replace(inner, text=sentence)
 
     m = _EVAL.match(text)
     if m:
@@ -383,6 +400,7 @@ def parse_claim(sentence: str) -> Claim | None:
         if subj and right:
             neg = bool(re.match(r"^(?:not|never|no longer|n't)\b", right)) or left.endswith(("n't", " not"))
             right_clean = re.sub(r"^(?:not|never|no longer|actually|really|now|currently|just)\s+", "", right)
+            right_clean = re.sub(r"\s+(?:now|currently|nowadays|these days|today|instead|anymore)$", "", right_clean)
             return Claim(sentence, "fact", subj, _core(left) or subj, right_clean, token_set(right_clean),
                          -1 if neg else 1, slots(right_clean))
     return None

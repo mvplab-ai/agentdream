@@ -50,8 +50,10 @@ class Scheduler:
         self.only_new = only_new
         self.dream_options = dict(dream_options or {})
         if dream_fn is None:
-            from .api import dream as dream_fn
-        self.dream_fn = dream_fn
+            from .api import dream
+
+            dream_fn = dream
+        self.dream_fn: Callable[..., Any] = dream_fn
         jobs_dir = self.dream_options.get("jobs_dir")
         base = Path(jobs_dir).parent if jobs_dir else Path.cwd() / ".agentdream"
         self.state_file = Path(state_file) if state_file else base / "scheduler-state.json"
@@ -90,7 +92,7 @@ class Scheduler:
                 return Trigger(f"idle for {int(now - latest)}s (>= {int(self.idle)}s) with {len(pending)} new "
                                "session(s)", names)
         if self.every is not None:
-            last = self.state.get("last_run") or self.state.get("started")
+            last = float(self.state.get("last_run") or self.state.get("started") or now)
             if now - last >= self.every and (pending or not self.only_new):
                 return Trigger(f"interval of {int(self.every)}s elapsed", names)
         return None

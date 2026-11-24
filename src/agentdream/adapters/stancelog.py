@@ -77,7 +77,7 @@ class StancelogAdapter(MemoryAdapter):
     def detect(cls, path: Path) -> bool:
         return str(path).startswith(PREFIX)
 
-    def sidecars(self, path) -> list[Path]:
+    def sidecars(self, path: str | Path) -> list[Path]:
         # the journal matters most: stancelog would otherwise "recover" the old
         # events from it into the newly written database
         p = strip_prefix(path)
@@ -123,7 +123,7 @@ class StancelogAdapter(MemoryAdapter):
         return out
 
     # ----------------------------------------------------------------- write
-    def write(self, entries: list[MemoryEntry], dest) -> Path:
+    def write(self, entries: list[MemoryEntry], dest: str | Path) -> Path:
         dest = Path(strip_prefix(dest))
         self._check_dest(dest)
         if dest.exists():

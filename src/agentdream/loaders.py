@@ -230,22 +230,25 @@ def detect_format(text: str, path: str = "") -> str:
                 # a single-line JSONL file
                 return "claude-code" if data.get("type") in ("user", "assistant", "summary", "system") \
                     and "message" in data else "jsonl"
-        # JSONL?
-        objs = []
-        for line in text.splitlines()[:50]:
-            if not line.strip():
-                continue
-            try:
-                o = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(o, dict):
-                objs.append(o)
-        if objs:
-            if any(o.get("type") in ("user", "assistant") and isinstance(o.get("message"), dict) for o in objs):
-                return "claude-code"
-            if any("role" in o or "speaker" in o for o in objs):
-                return "jsonl"
+    # JSONL? Sample the first lines even if the very first one isn't JSON (a truncated write, a banner):
+    # it's JSONL when most sampled lines are JSON objects.
+    objs = []
+    sampled = 0
+    for line in text.splitlines()[:50]:
+        if not line.strip():
+            continue
+        sampled += 1
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(o, dict):
+            objs.append(o)
+    if objs and len(objs) * 2 >= sampled:
+        if any(o.get("type") in ("user", "assistant") and isinstance(o.get("message"), dict) for o in objs):
+            return "claude-code"
+        if any("role" in o or "speaker" in o for o in objs):
+            return "jsonl"
     return "text"
 
 
@@ -314,7 +317,8 @@ def _sort_key(t: Transcript) -> tuple:
     return (0 if ts is not None else 1, ts or 0.0, t.metadata.get("mtime", 0.0), t.source_path or "")
 
 
-def load_transcripts(sources, format: str | None = None, max_sessions: int | None = None,
+def load_transcripts(sources: Iterable[str | os.PathLike[str]] | str | os.PathLike[str] | None,
+                     format: str | None = None, max_sessions: int | None = None,
                      min_sessions: int = 0) -> tuple[list[Transcript], list[str]]:
     """Load and chronologically order transcripts. Returns (transcripts, notices).
 

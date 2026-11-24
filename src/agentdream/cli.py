@@ -395,12 +395,13 @@ def _run(args: argparse.Namespace) -> int:
     if args.cmd == "install-claude-hook":
         from .claude_hook import HookOptions, install
 
-        opts = HookOptions(memory=_abs(args.memory) if args.memory and not args.memory.startswith("stancelog:")
-                           else args.memory, every=args.every, apply=bool(args.apply) or None,
-                           config=_abs(args.config), backend=args.backend, model=args.model)
-        res = install(args.scope, Path.cwd(), opts, event=args.event, path=args.settings)
-        print(res.message)
-        print(f"  command: {res.command}")
+        hook_opts = HookOptions(
+            memory=_abs(args.memory) if args.memory and not args.memory.startswith("stancelog:") else args.memory,
+            every=args.every, apply=bool(args.apply) or None, config=_abs(args.config), backend=args.backend,
+            model=args.model)
+        installed = install(args.scope, Path.cwd(), hook_opts, event=args.event, path=args.settings)
+        print(installed.message)
+        print(f"  command: {installed.command}")
         mode = "APPLY automatically (backups are kept)" if args.apply else \
             "dry run: dreams are staged for review, nothing is applied"
         print(f"  mode: {mode}; every {args.every or 1} session(s)")
@@ -412,8 +413,8 @@ def _run(args: argparse.Namespace) -> int:
     if args.cmd == "uninstall-claude-hook":
         from .claude_hook import uninstall
 
-        res = uninstall(args.scope, Path.cwd(), path=args.settings)
-        print(res.message)
+        removed = uninstall(args.scope, Path.cwd(), path=args.settings)
+        print(removed.message)
         return 0
     return 2  # pragma: no cover
 

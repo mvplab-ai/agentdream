@@ -119,8 +119,9 @@ class Evidence:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Evidence:
-        return cls(**{k: d.get(k) for k in ("citation", "quote", "source_path", "line_no", "role", "timestamp")},
-                   stance=d.get("stance") or "supports")
+        return cls(citation=str(d.get("citation") or ""), quote=str(d.get("quote") or ""),
+                   source_path=d.get("source_path"), line_no=d.get("line_no"), role=d.get("role"),
+                   stance=d.get("stance") or "supports", timestamp=d.get("timestamp"))
 
     @classmethod
     def from_message(cls, msg: Message, quote: str, stance: str = "supports") -> Evidence:

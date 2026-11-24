@@ -333,7 +333,9 @@ phases see the consolidated store (verify checks the merged note, not both dupli
   or ≥ 0.5 with high sequence similarity, or near-containment), excluding pairs whose typed values
   (directions, numbers, on/off states) or polarity differ — those are staleness or contradiction questions.
   Connected components become merges. Claims (`subject is value`, `use / don't use X`, `X is better`) with
-  the same subject and conflicting values become `replace` (latest by timestamp, else store order);
+  the same subject and conflicting values become `replace` (latest by timestamp, else store order). Two
+  subjects with the same head noun but a distinguishing qualifier on *both* sides ("the PokéCenter in
+  Viridian City" / "... in Pewter City") are different things, never one stale value of the other;
   opposite preferences become temporal contradictions.
 * *verify*: for each claim, transcript sentences mentioning its subject are scored: failure markers
   ("no PokéCenter here", "still can't find") refute the value they mention, confirmation markers ("found",

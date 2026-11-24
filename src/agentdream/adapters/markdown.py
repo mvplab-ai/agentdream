@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from ..models import MemoryEntry
 from .base import AdapterError, MemoryAdapter
@@ -136,7 +138,7 @@ def parse_markdown(rel: str, text: str) -> _ParsedFile:
             indent, mark, space, first = bm.groups()
             marker = mark + space
             start = i
-            body = [first]
+            body_lines = [first]
             i += 1
             cont_indent = len(indent) + len(marker)
             while i < len(lines):
@@ -144,7 +146,7 @@ def parse_markdown(rel: str, text: str) -> _ParsedFile:
                 if not nxt.strip():
                     # blank line: continue only if followed by an indented continuation
                     if i + 1 < len(lines) and lines[i + 1].startswith(" " * cont_indent) and lines[i + 1].strip():
-                        body.append("")
+                        body_lines.append("")
                         i += 1
                         continue
                     break
@@ -154,13 +156,13 @@ def parse_markdown(rel: str, text: str) -> _ParsedFile:
                 if _HEADING.match(nxt) or (_FENCE.match(nxt) and not nxt.startswith(" " * cont_indent)):
                     break
                 if nxt.startswith(" ") or nxt.startswith("\t"):
-                    body.append(nxt[cont_indent:] if nxt.startswith(" " * cont_indent) else nxt.strip())
+                    body_lines.append(nxt[cont_indent:] if nxt.startswith(" " * cont_indent) else nxt.strip())
                     i += 1
                     continue
                 # lazy continuation line
-                body.append(nxt.strip())
+                body_lines.append(nxt.strip())
                 i += 1
-            add(start, i, marker, "\n".join(body), indent)
+            add(start, i, marker, "\n".join(body_lines), indent)
             continue
         # paragraph
         start = i
@@ -184,7 +186,7 @@ def _render_block(content: str, marker: str, indent: str) -> list[str]:
 class MarkdownAdapter(MemoryAdapter):
     name = "markdown"
 
-    def __init__(self, path, **options):
+    def __init__(self, path: str | Path, **options: Any):
         super().__init__(path, **options)
         self.single_file = self.path.is_file()
         self._cache: dict[str, _ParsedFile] | None = None
@@ -198,7 +200,7 @@ class MarkdownAdapter(MemoryAdapter):
         return False
 
     @staticmethod
-    def _iter_files(root: Path):
+    def _iter_files(root: Path) -> Iterator[Path]:
         for p in sorted(root.rglob("*")):
             rel = p.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):
@@ -234,11 +236,11 @@ class MarkdownAdapter(MemoryAdapter):
                 entries.append(e)
         return entries
 
-    def output_path(self, store_dir):
+    def output_path(self, store_dir: str | Path) -> Path:
         d = Path(store_dir)
         return d / self.path.name if self.single_file else d
 
-    def write(self, entries: list[MemoryEntry], dest) -> Path:
+    def write(self, entries: list[MemoryEntry], dest: str | Path) -> Path:
         dest = Path(dest)
         self._check_dest(dest)
         files = self._files()

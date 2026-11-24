@@ -26,7 +26,7 @@ from collections.abc import Iterable, Iterator
 
 from ..blocking import TokenIndex, similar_pairs
 from ..context import DreamContext, SentenceRec
-from ..models import Evidence, MemoryEntry, Operation, stable_hash
+from ..models import Evidence, MemoryEntry, Message, Operation, stable_hash
 from ..text import (
     CONFIRM_MARKERS,
     FAILURE_MARKERS,
@@ -247,10 +247,11 @@ def _memory_conflicts(ctx: DreamContext) -> None:
         used.update(group)
         ordered = sorted(group, key=lambda k: DreamContext.recency_key(entries[k]))
         newest = entries[ordered[-1]]
-        newest_claim = claims[ordered[-1]]
-        older_idx = [k for k in ordered[:-1] if claims[k].polarity != newest_claim.polarity] or ordered[:-1]
+        newest_claim = _claim(claims, ordered[-1])
+        older_idx = [k for k in ordered[:-1]
+                     if _claim(claims, k).polarity != newest_claim.polarity] or ordered[:-1]
         oldest = entries[older_idx[0]]
-        current = resolved_preference_content(claims[older_idx[0]].text, newest.content, newest_claim)
+        current = resolved_preference_content(_claim(claims, older_idx[0]).text, newest.content, newest_claim)
         if _when(newest):
             current += history_suffix(oldest.content, _when(oldest), _when(newest)[:10])
         else:
@@ -288,7 +289,7 @@ def _memory_conflicts(ctx: DreamContext) -> None:
         kept = newest.copy()
         kept.metadata = {**kept.metadata, "supersedes": [
             {"id": e.id, "content": e.content, "when": _when(e) or None} for e in stale]}
-        opposite = any(claims[k].polarity != claims[ordered[-1]].polarity for k in ordered[:-1])
+        opposite = any(_claim(claims, k).polarity != _claim(claims, ordered[-1]).polarity for k in ordered[:-1])
         op = Operation(
             id=Operation.make_id("replace", [e.id for e in stale] + [newest.id], [newest.content]),
             type="replace",
@@ -302,6 +303,13 @@ def _memory_conflicts(ctx: DreamContext) -> None:
             confidence=0.75 if has_ts else 0.55, phase="consolidate",
         )
         ctx.add_op(op)
+
+
+def _claim(claims: list[Claim | None], k: int) -> Claim:
+    """Members of a conflict group always have a claim (pairs are only formed between claims)."""
+    c = claims[k]
+    assert c is not None
+    return c
 
 
 def _subject_candidates(claims: list[Claim | None]) -> list[tuple[int, int]]:
@@ -501,7 +509,7 @@ def _verify_slot(ctx: DreamContext, entry: MemoryEntry, claim: Claim, cat: str) 
     old_score = sum(score.get(w, 0) for w in old_words)
     alts = [w for w in support if w not in old_words and score[w] > 0]
     if alts:
-        best = max(alts, key=lambda w: (score[w], support[w]))
+        best = max(alts, key=lambda w: (score[w], support[w], w))  # w: deterministic tie-break
         if score[best] >= 2 and score[best] > old_score:
             new_content = entry.content
             for w in old_words:
@@ -842,7 +850,7 @@ def _mistake_insights(ctx: DreamContext, budget: list[int]) -> None:
         if _already_known(ctx, rep):
             continue
         ev = [Evidence.from_message(r.msg, r.text, "supports") for r, _ in cl["members"][:6]]
-        top = ", ".join(sorted(counts, key=lambda t: -counts[t])[:4])
+        top = ", ".join(sorted(counts, key=lambda t: (-counts[t], t))[:4])
         ctx.add_op(Operation(
             id=Operation.make_id("insight", [], [content]), type="insight",
             summary=f"Recurring mistake {sess_txt}: {shorten(rep, 70)}",
@@ -874,7 +882,7 @@ def _normalize_cmd(cmd: str) -> str | None:
     return " ".join(out)
 
 
-def _commands_in(msg) -> list[str]:
+def _commands_in(msg: Message) -> list[str]:
     text = msg.content
     cmds = []
     m = re.match(r"^\[tool\]\s+(?:Bash|bash|shell|terminal|run_command|exec)\s*:\s*(.+)$", text, re.S)
@@ -897,9 +905,9 @@ def _commands_in(msg) -> list[str]:
 
 
 def _workflow_insights(ctx: DreamContext, budget: list[int]) -> None:
-    per_session: list[list[tuple[str, object]]] = []
+    per_session: list[list[tuple[str, Message]]] = []
     for t in ctx.transcripts:
-        seq: list[tuple[str, object]] = []
+        seq: list[tuple[str, Message]] = []
         seen: set[str] = set()
         for m in t.messages:
             for c in _commands_in(m):
