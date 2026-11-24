@@ -22,7 +22,7 @@ python -m venv .venv
 .venv/bin/pip install -e ".[stancelog]"           # optional: run the stancelog adapter tests too
 .venv/bin/python -m pytest -q                      # ~25 s
 .venv/bin/python -m pytest -q -m edge              # only the edge-case suite (tests/edge)
-.venv/bin/python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # refresh the edge-case table
+.venv/bin/python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # refresh EDGE_CASES.md + the table in docs/TESTING.md
 .venv/bin/python -m pytest -q --cov=agentdream --cov-report=term-missing   # CI enforces fail_under
 .venv/bin/ruff check src tests examples
 .venv/bin/mypy                                     # config in pyproject.toml
@@ -34,10 +34,13 @@ diagrams. Regenerate the README's before/after sample with `python examples/run_
 the heuristics.
 
 Edge cases go in `tests/edge/test_<area>.py` (one file per area) with a one-line docstring per test; the
-first docstring line becomes the case text in [docs/EDGE_CASES.md](docs/EDGE_CASES.md). Fix the code to make a
-case pass, never the assertion.
+first docstring line becomes the case text in [docs/EDGE_CASES.md](docs/EDGE_CASES.md) and
+[docs/TESTING.md](docs/TESTING.md). Fix the code to make a case pass, never the assertion.
 
-The live smoke test (`tests/test_live.py`) runs only with `AGENTDREAM_LIVE=1` and a logged-in `claude` CLI.
+Live tests (`tests/test_live.py` and `tests/live/`) run only when you opt in:
+`AGENTDREAM_LIVE=1` (logged-in `claude` CLI), `AGENTDREAM_OLLAMA_MODEL=...`, and/or `ANTHROPIC_API_KEY`.
+They are never part of CI. What has actually been run live vs mocked is recorded in
+[docs/TESTING.md](docs/TESTING.md).
 
 ## Layout
 

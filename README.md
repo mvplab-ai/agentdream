@@ -301,7 +301,8 @@ so restarts don't re-dream old sessions. Defaults can live in a `[schedule]` con
 
 How each guarantee is enforced and tested: [docs/ARCHITECTURE.md#safety-guarantees](docs/ARCHITECTURE.md#safety-guarantees).
 Edge cases (empty / huge / malformed / hostile inputs, crashes, concurrency, model misbehaviour) and the
-behaviour for each: **[docs/EDGE_CASES.md](docs/EDGE_CASES.md)**.
+behaviour for each: **[docs/EDGE_CASES.md](docs/EDGE_CASES.md)**. How the suite is run, the pass/fail
+table, and what was verified live vs mocked: **[docs/TESTING.md](docs/TESTING.md)**.
 
 ## FAQ
 

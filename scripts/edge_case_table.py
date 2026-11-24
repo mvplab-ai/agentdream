@@ -3,6 +3,7 @@
 
     python scripts/edge_case_table.py                 # print the table (exit code = pytest's)
     python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # regenerate the doc
+                                                                 # (also refreshes the table in docs/TESTING.md)
 
 Conventions it relies on (see tests/edge/edgekit.py): one file per area, ``test_<area>.py``;
 the first docstring line of each test function is the case description. Parametrized tests
@@ -128,8 +129,27 @@ def main(argv: list[str] | None = None) -> int:
         intro = INTRO_FILE.read_text(encoding="utf-8")
         Path(a.write).write_text(intro + "\n## Cases\n\n" + md, encoding="utf-8")
         print(f"wrote {a.write}", file=sys.stderr)
+        testing = ROOT / "docs" / "TESTING.md"
+        if testing.exists():
+            refresh_testing(testing, md)
     print(md)
     return code
+
+
+MARKER_START = "<!-- edge-case-table:start -->"
+MARKER_END = "<!-- edge-case-table:end -->"
+
+
+def refresh_testing(path: Path, md: str) -> None:
+    """Replace the marked table section in docs/TESTING.md, if both markers are present."""
+    text = path.read_text(encoding="utf-8")
+    start, end = text.find(MARKER_START), text.find(MARKER_END)
+    if start < 0 or end < 0 or end < start:
+        print(f"{path} has no {MARKER_START} ... {MARKER_END} section; left unchanged", file=sys.stderr)
+        return
+    updated = text[: start + len(MARKER_START)] + "\n" + md.rstrip() + "\n" + text[end:]
+    path.write_text(updated, encoding="utf-8")
+    print(f"updated table in {path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

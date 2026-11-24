@@ -145,7 +145,8 @@ def test_jsonl_memory_store_truncated_last_line_is_an_error(tmp_path):
 def test_json_memory_store_trailing_comma_is_an_error(tmp_path):
     """A JSON memory store with a trailing comma -> AdapterError with line/column, not a bare JSONDecodeError."""
     store = write(tmp_path / "m.json", '[\n  {"id": "a", "content": "one"},\n]\n')
-    with pytest.raises(AdapterError, match=r"m\.json: invalid JSON at line 2 column \d+: .*trailing comma"):
+    # 3.13+ names the trailing comma at line 2; earlier CPython reports "Expecting value" at the ']'.
+    with pytest.raises(AdapterError, match=r"m\.json: invalid JSON at line [23] column \d+:"):
         get_adapter(store).load()
 
 

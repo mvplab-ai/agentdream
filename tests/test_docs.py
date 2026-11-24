@@ -93,8 +93,8 @@ CLI_LINES = [(doc, line, argv) for doc, line, _l, body, _r in SHELL for argv in 
 
 def test_docs_mention_cli_commands():
     cmds = {argv[0] for _d, _l, argv in CLI_LINES if argv and not argv[0].startswith("-")}
-    assert cmds >= {"dream", "show", "accept", "discard", "schedule", "serve-mcp", "install-claude-hook",
-                    "uninstall-claude-hook", "list", "config", "hook"}
+    assert cmds >= {"dream", "show", "accept", "discard", "restore", "schedule", "serve-mcp",
+                    "install-claude-hook", "uninstall-claude-hook", "list", "config", "hook"}
 
 
 @pytest.mark.parametrize(("doc", "line", "argv"), CLI_LINES,
