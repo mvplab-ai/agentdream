@@ -174,7 +174,11 @@ print(n("contradictions"))
 print(n("insights"))
 ')"
 
-mapfile -t fields <<< "$parsed"
+# macOS /bin/bash is 3.2 and has no mapfile. Read the nine lines by hand.
+fields=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+  fields+=("$line")
+done <<< "$parsed"
 JOB_ID="${fields[0]:-}"
 STATUS="${fields[1]:-}"
 REPORT_MD="${fields[2]:-}"
