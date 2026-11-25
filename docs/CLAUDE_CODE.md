@@ -8,7 +8,7 @@ Two independent ways to use agentdream from Claude Code:
 Install agentdream first (it is not on PyPI yet):
 
 ```bash
-pip install "git+https://github.com/systemagents-ai/agentdream"
+pip install "git+https://github.com/mvplab-ai/agentdream"
 agentdream --version
 ```
 

@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security report
-    url: https://github.com/systemagents-ai/agentdream/security/advisories/new
+    url: https://github.com/mvplab-ai/agentdream/security/advisories/new
     about: Please do not file a public issue for a vulnerability. Use private reporting.
   - name: Documentation
-    url: https://github.com/systemagents-ai/agentdream/blob/main/README.md
+    url: https://github.com/mvplab-ai/agentdream/blob/main/README.md
     about: README, architecture, backends, and testing docs.

@@ -60,9 +60,9 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement by opening a
-private report through GitHub (a [private vulnerability report](https://github.com/systemagents-ai/agentdream/security/advisories/new)
+private report through GitHub (a [private vulnerability report](https://github.com/mvplab-ai/agentdream/security/advisories/new)
 is appropriate if the report itself should stay confidential; otherwise contact
-the maintainers via the `systemagents-ai` GitHub organization).
+the maintainers via the `mvplab-ai` GitHub organization).
 
 All complaints will be reviewed and investigated promptly and fairly.
 
