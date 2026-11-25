@@ -1,0 +1,55 @@
+name: Dream example
+
+# Dry-run agentdream against the bundled memory and sessions, and upload the report.
+# workflow_dispatch can select the anthropic backend (ANTHROPIC_API_KEY from secrets)
+# or fail when the report contains corrections. Pull requests always use deterministic
+# and do not fail on corrections: examples/memory is supposed to contain some.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Dream backend. anthropic reads ANTHROPIC_API_KEY from secrets.
+        required: false
+        default: deterministic
+        type: choice
+        options:
+          - deterministic
+          - anthropic
+      fail-on-corrections:
+        description: Fail when the report contains corrections. The bundled examples do.
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+  push:
+    branches: [main]
+
+# contents: read checks out the repo. The dream writes job state under runner.temp,
+# not the git index, and does not push. Artifact upload works with this permission.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dry-run:
+    name: dry-run dream
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run agentdream dry-run
+        uses: ./examples/integrations/github-action
+        with:
+          memory: examples/memory
+          sessions: examples/sessions
+          backend: ${{ github.event_name == 'workflow_dispatch' && inputs.backend || 'deterministic' }}
+          jobs-dir: ${{ runner.temp }}/agentdream-jobs
+          fail-on-corrections: ${{ github.event_name == 'workflow_dispatch' && inputs.fail-on-corrections && 'true' || 'false' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.backend == 'anthropic' && secrets.ANTHROPIC_API_KEY || '' }}

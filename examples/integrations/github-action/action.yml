@@ -1,0 +1,135 @@
+name: Agentdream dry-run
+description: >-
+  Run agentdream dream and upload report.md and report.json.
+  Dry run unless apply is the confirmation string. The default backend is
+  deterministic and needs no API key.
+
+inputs:
+  memory:
+    description: >-
+      Memory store: a markdown file or folder, JSON/JSONL, SQLite, or stancelog:<path>.
+    required: true
+  sessions:
+    description: >-
+      One transcript file, directory, or glob. Passed to the CLI as a single argument
+      so the shell does not expand the glob. A directory is read recursively.
+    required: true
+  backend:
+    description: >-
+      deterministic (default; no network and no API key), anthropic, openai, ollama,
+      lmstudio, or claude-cli. anthropic reads ANTHROPIC_API_KEY from the environment.
+    required: false
+    default: deterministic
+  model:
+    description: Model name for an LLM backend. Omit it to use that backend's default.
+    required: false
+    default: ""
+  jobs-dir:
+    description: >-
+      Writable directory for job state. Default is $RUNNER_TEMP/agentdream-jobs, which
+      is outside the checkout. Must not overlap the memory store. The dry run does not
+      need contents:write; contents:read is enough to check out the repo.
+    required: false
+    default: ""
+  out:
+    description: >-
+      Staging directory for the new store and the report. Default is <jobs-dir>/staged,
+      outside the memory store. This overrides a project config out path.
+    required: false
+    default: ""
+  python-version:
+    description: Python version used to install and run agentdream.
+    required: false
+    default: "3.12"
+  install:
+    description: >-
+      auto (default) installs the agentdream tree that contains this action, or
+      git+https://github.com/mvplab-ai/agentdream if this folder was copied on its own.
+      local always installs that tree. git always installs from GitHub. skip uses the
+      agentdream already installed for the selected Python.
+    required: false
+    default: auto
+  fail-on-corrections:
+    description: >-
+      When true, the step exits 1 if the report's corrected count is greater than zero.
+      The run is still a dry run, and the report is still uploaded. The bundled
+      examples contain corrections, so this fails on purpose against examples/memory.
+    required: false
+    default: "false"
+  apply:
+    description: >-
+      Leave empty. true, yes, and 1 are rejected. The only value that writes the memory
+      store is I-understand-this-writes-the-memory-store, which runs agentdream accept
+      after the report is written. The action never commits or pushes that write.
+    required: false
+    default: ""
+  extra-args:
+    description: >-
+      Extra arguments appended to agentdream dream, split like a shell command.
+      --apply is rejected here; use the apply input.
+    required: false
+    default: ""
+  artifact-name:
+    description: Artifact name for report.md and report.json.
+    required: false
+    default: agentdream-report
+  upload-artifact:
+    description: Upload report.md and report.json when both were written.
+    required: false
+    default: "true"
+
+outputs:
+  job-id:
+    description: Dream job id.
+    value: ${{ steps.run.outputs.job-id }}
+  status:
+    description: Dream job status.
+    value: ${{ steps.run.outputs.status }}
+  corrected:
+    description: Number of corrected notes in the report.
+    value: ${{ steps.run.outputs.corrected }}
+  report-md:
+    description: Path to the uploaded copy of report.md.
+    value: ${{ steps.run.outputs.report-md }}
+  report-json:
+    description: Path to the uploaded copy of report.json.
+    value: ${{ steps.run.outputs.report-json }}
+  jobs-dir:
+    description: Jobs directory used for this run.
+    value: ${{ steps.run.outputs.jobs-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      if: inputs.install != 'skip'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Run agentdream
+      id: run
+      shell: bash
+      env:
+        INPUT_MEMORY: ${{ inputs.memory }}
+        INPUT_SESSIONS: ${{ inputs.sessions }}
+        INPUT_BACKEND: ${{ inputs.backend }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_JOBS_DIR: ${{ inputs.jobs-dir }}
+        INPUT_OUT: ${{ inputs.out }}
+        INPUT_INSTALL: ${{ inputs.install }}
+        INPUT_FAIL_ON_CORRECTIONS: ${{ inputs.fail-on-corrections }}
+        INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: bash "$GITHUB_ACTION_PATH/run.sh"
+
+    - name: Upload dream report
+      if: >-
+        always() && inputs.upload-artifact == 'true' &&
+        steps.run.outputs.report-md != '' && steps.run.outputs.report-json != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.artifact-dir }}
+        if-no-files-found: error
+        retention-days: 14

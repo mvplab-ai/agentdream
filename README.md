@@ -313,6 +313,17 @@ Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
 The same six tools become available in Cursor's agent. A copy lives in
 [`examples/integrations/cursor-mcp.json`](examples/integrations/cursor-mcp.json).
 
+## GitHub Action
+
+A composite action in
+[`examples/integrations/github-action`](examples/integrations/github-action/README.md)
+runs a dry-run dream and uploads `report.md` and `report.json`. The default backend is
+`deterministic`, so the job needs no API key. It does not accept or pass `--apply` unless
+`apply` is set to the confirmation string in that README. `contents: read` is enough;
+job state goes to `jobs-dir` (default `$RUNNER_TEMP/agentdream-jobs`).
+[`.github/workflows/dream-example.yml`](.github/workflows/dream-example.yml) runs it
+against `examples/memory` and `examples/sessions`.
+
 ## Python API
 
 <!-- test: run -->
