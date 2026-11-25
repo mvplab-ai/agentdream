@@ -10,7 +10,7 @@ Please **do not** open a public issue for a security report.
 
 Use GitHub's private vulnerability reporting on this repository:
 
-**[Report a vulnerability](https://github.com/systemagents-ai/agentdream/security/advisories/new)**
+**[Report a vulnerability](https://github.com/mvplab-ai/agentdream/security/advisories/new)**
 
 Include:
 
@@ -21,7 +21,7 @@ Include:
 
 We will acknowledge the report and follow up through the advisory. Please give us a reasonable window to fix and release a patch before any public disclosure.
 
-If private reporting is unavailable, open a [draft security advisory](https://github.com/systemagents-ai/agentdream/security/advisories) or contact the maintainers through the `systemagents-ai` GitHub organization.
+If private reporting is unavailable, open a [draft security advisory](https://github.com/mvplab-ai/agentdream/security/advisories) or contact the maintainers through the `mvplab-ai` GitHub organization.
 
 ## What we already guarantee
 

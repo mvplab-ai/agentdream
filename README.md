@@ -1,9 +1,9 @@
 # agentdream
 
-[![CI](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml/badge.svg)](https://github.com/systemagents-ai/agentdream/actions/workflows/ci.yml)
+[![CI](https://github.com/mvplab-ai/agentdream/actions/workflows/ci.yml/badge.svg)](https://github.com/mvplab-ai/agentdream/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10 | 3.11 | 3.12 | 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
-[![GitHub stars](https://img.shields.io/github/stars/systemagents-ai/agentdream?style=flat)](https://github.com/systemagents-ai/agentdream/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/mvplab-ai/agentdream?style=flat)](https://github.com/mvplab-ai/agentdream/stargazers)
 
 **Sleep-time memory consolidation ("dreaming") for any agent and any model — local-first, reviewable, zero dependencies.**
 
@@ -29,7 +29,7 @@ your Claude Code login.
 ## 60-second quickstart
 
 ```bash
-git clone https://github.com/systemagents-ai/agentdream && cd agentdream
+git clone https://github.com/mvplab-ai/agentdream && cd agentdream
 pip install .                        # Python >= 3.10; not on PyPI yet
 
 agentdream dream --memory examples/memory --sessions examples/sessions     # dry run: nothing is changed

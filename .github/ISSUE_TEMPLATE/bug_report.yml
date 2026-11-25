@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for the report. If this is a security issue, please use
-        [private vulnerability reporting](https://github.com/systemagents-ai/agentdream/security/advisories/new)
+        [private vulnerability reporting](https://github.com/mvplab-ai/agentdream/security/advisories/new)
         instead of a public issue.
   - type: textarea
     id: what-happened

@@ -40,11 +40,11 @@ allow-direct-references = true  # needed for the git URL in the stancelog extra
 agentdream = "agentdream.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/systemagents-ai/agentdream"
-Repository = "https://github.com/systemagents-ai/agentdream"
-Documentation = "https://github.com/systemagents-ai/agentdream#60-second-quickstart"
-Issues = "https://github.com/systemagents-ai/agentdream/issues"
-Changelog = "https://github.com/systemagents-ai/agentdream/releases"
+Homepage = "https://github.com/mvplab-ai/agentdream"
+Repository = "https://github.com/mvplab-ai/agentdream"
+Documentation = "https://github.com/mvplab-ai/agentdream#60-second-quickstart"
+Issues = "https://github.com/mvplab-ai/agentdream/issues"
+Changelog = "https://github.com/mvplab-ai/agentdream/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentdream"]
