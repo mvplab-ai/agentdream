@@ -1,0 +1,755 @@
+{
+  "model": "claude-sonnet-5-5",
+  "repeats": 3,
+  "arms": [
+    "before",
+    "after-rules",
+    "after-model"
+  ],
+  "memories": {
+    "before": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Run the tests with `make test` before every commit.\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Don't use dataclasses for new models \u2014 the team prefers plain dicts. (2026-01-05)\n\n## Service facts\n\n- The API server listens on port 8080. (2025-12-01)\n- The API server listens on port 9090. (2026-02-10)\n",
+    "after-rules": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (History: earlier said \"Don't use dataclasses for new models \u2014 the team prefers plain dicts\" (2026-01-05); reversed later (sessions/session-03.jsonl:3).)\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n\n## Recurring mistakes\n\n- Recurring mistake (2 occurrences across 2 sessions): \"Failed: No rule to make target 'test'\" \u2014 check before repeating.\n\n## Workflows\n\n- Converged workflow (used in 2 sessions): `make test` \u2192 `python -m unittest discover -s`.\n",
+    "after-model": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `orders/defaults.py`. `config/settings.json` is a dead leftover file that nothing reads. (2026-03-02)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `python -m unittest discover -s tests` before every commit. The Makefile was removed, so `make test` no longer works. (2026-03-05)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (2026-03-09) (History: until 2026-03-09 the team preferred plain dicts and avoided dataclasses, per the 2026-01-05 note.)\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n\n## Insights\n\n- Recurring mistake: acting on stale notes without checking them. Before relying on a noted path, command or port, verify it against the repo or running service (e.g. confirm the file is actually read, the Makefile exists, the port answers). When a note proves wrong, fix the note in the same session \u2014 the `make test` failure repeated on 2026-03-09 after it had already been diagnosed on 2026-03-05. (2026-03-09)\n"
+  },
+  "dreams": {
+    "after-rules": {
+      "backend": "deterministic",
+      "operations": [
+        {
+          "id": "merge-9b7e8198",
+          "type": "merge",
+          "confidence": 0.85,
+          "summary": "Merged 2 duplicate notes into CLAUDE.md#3"
+        },
+        {
+          "id": "replace-c65441c7",
+          "type": "replace",
+          "confidence": 0.75,
+          "summary": "Stale value replaced by the latest: \"The API server listens on port 9090. (2026-02-10)\""
+        },
+        {
+          "id": "contradiction-f27dce30",
+          "type": "contradiction",
+          "confidence": 0.7,
+          "summary": "Preference reversed in later sessions: now \"Use dataclasses for new models.\""
+        },
+        {
+          "id": "insight-bde11a81",
+          "type": "insight",
+          "confidence": 0.6,
+          "summary": "Recurring mistake across 2 sessions: Failed: No rule to make target 'test'"
+        },
+        {
+          "id": "insight-4e9e8faf",
+          "type": "insight",
+          "confidence": 0.55,
+          "summary": "Converged workflow: `make test` \u2192 `python -m unittest discover -s`"
+        }
+      ],
+      "warnings": []
+    },
+    "after-model": {
+      "backend": "claude-cli",
+      "operations": [
+        {
+          "id": "merge-e38629b3",
+          "type": "merge",
+          "confidence": 0.96,
+          "summary": "Merge duplicate `make test` before-commit notes"
+        },
+        {
+          "id": "replace-c65441c7",
+          "type": "replace",
+          "confidence": 0.9,
+          "summary": "API server port 8080 superseded by 9090"
+        },
+        {
+          "id": "correct-44724035",
+          "type": "correct",
+          "confidence": 0.97,
+          "summary": "Runtime settings live in orders/defaults.py, not config/settings.json"
+        },
+        {
+          "id": "correct-bbbfd302",
+          "type": "correct",
+          "confidence": 0.97,
+          "summary": "Test command is `python -m unittest discover -s tests`; `make test` fails because the Makefile was removed"
+        },
+        {
+          "id": "contradiction-4ac32725",
+          "type": "contradiction",
+          "confidence": 0.95,
+          "summary": "Dataclass preference reversed: new models now use dataclasses"
+        },
+        {
+          "id": "insight-6b28fa00",
+          "type": "insight",
+          "confidence": 0.8,
+          "summary": "Stale notes repeatedly caused failed actions across three sessions; verify notes before acting and fix them immediately."
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "rows": [
+    {
+      "arm": "before",
+      "task": "timeout",
+      "rep": 1,
+      "turns": 3,
+      "seconds": 4.6,
+      "cost_usd": 0.0928,
+      "output_tokens": 341,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "timeout",
+      "rep": 1,
+      "turns": 3,
+      "seconds": 4.4,
+      "cost_usd": 0.0934,
+      "output_tokens": 345,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-model",
+      "task": "timeout",
+      "rep": 1,
+      "turns": 5,
+      "seconds": 7.1,
+      "cost_usd": 0.1012,
+      "output_tokens": 770,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "tax",
+      "rep": 1,
+      "turns": 5,
+      "seconds": 7.7,
+      "cost_usd": 0.1005,
+      "output_tokens": 843,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "tax",
+      "rep": 1,
+      "turns": 5,
+      "seconds": 7.7,
+      "cost_usd": 0.0495,
+      "output_tokens": 944,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "tax",
+      "rep": 1,
+      "turns": 5,
+      "seconds": 6.9,
+      "cost_usd": 0.0482,
+      "output_tokens": 818,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "model",
+      "rep": 1,
+      "turns": 3,
+      "seconds": 5.1,
+      "cost_usd": 0.0414,
+      "output_tokens": 470,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "model",
+      "rep": 1,
+      "turns": 3,
+      "seconds": 4.6,
+      "cost_usd": 0.0408,
+      "output_tokens": 380,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "model",
+      "rep": 1,
+      "turns": 3,
+      "seconds": 4.4,
+      "cost_usd": 0.0411,
+      "output_tokens": 394,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "healthcheck",
+      "rep": 1,
+      "turns": 6,
+      "seconds": 12.1,
+      "cost_usd": 0.0623,
+      "output_tokens": 1468,
+      "denials": 2,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "healthcheck",
+      "rep": 1,
+      "turns": 2,
+      "seconds": 4.1,
+      "cost_usd": 0.0396,
+      "output_tokens": 460,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "healthcheck",
+      "rep": 1,
+      "turns": 10,
+      "seconds": 14.4,
+      "cost_usd": 0.0699,
+      "output_tokens": 1592,
+      "denials": 2,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "timeout",
+      "rep": 2,
+      "turns": 3,
+      "seconds": 4.2,
+      "cost_usd": 0.0398,
+      "output_tokens": 341,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "timeout",
+      "rep": 2,
+      "turns": 3,
+      "seconds": 4.0,
+      "cost_usd": 0.0401,
+      "output_tokens": 328,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-model",
+      "task": "timeout",
+      "rep": 2,
+      "turns": 4,
+      "seconds": 5.4,
+      "cost_usd": 0.0448,
+      "output_tokens": 553,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "tax",
+      "rep": 2,
+      "turns": 6,
+      "seconds": 8.3,
+      "cost_usd": 0.0513,
+      "output_tokens": 949,
+      "denials": 1,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "tax",
+      "rep": 2,
+      "turns": 5,
+      "seconds": 7.4,
+      "cost_usd": 0.0488,
+      "output_tokens": 907,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "tax",
+      "rep": 2,
+      "turns": 5,
+      "seconds": 7.3,
+      "cost_usd": 0.0488,
+      "output_tokens": 864,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "model",
+      "rep": 2,
+      "turns": 3,
+      "seconds": 5.7,
+      "cost_usd": 0.0413,
+      "output_tokens": 473,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "model",
+      "rep": 2,
+      "turns": 4,
+      "seconds": 5.7,
+      "cost_usd": 0.0438,
+      "output_tokens": 445,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "model",
+      "rep": 2,
+      "turns": 3,
+      "seconds": 5.3,
+      "cost_usd": 0.0414,
+      "output_tokens": 410,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "healthcheck",
+      "rep": 2,
+      "turns": 9,
+      "seconds": 14.1,
+      "cost_usd": 0.0675,
+      "output_tokens": 1435,
+      "denials": 3,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "healthcheck",
+      "rep": 2,
+      "turns": 2,
+      "seconds": 4.5,
+      "cost_usd": 0.04,
+      "output_tokens": 493,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "healthcheck",
+      "rep": 2,
+      "turns": 11,
+      "seconds": 19.1,
+      "cost_usd": 0.0835,
+      "output_tokens": 2180,
+      "denials": 1,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "timeout",
+      "rep": 3,
+      "turns": 3,
+      "seconds": 4.1,
+      "cost_usd": 0.0398,
+      "output_tokens": 341,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "timeout",
+      "rep": 3,
+      "turns": 3,
+      "seconds": 4.1,
+      "cost_usd": 0.0404,
+      "output_tokens": 351,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-model",
+      "task": "timeout",
+      "rep": 3,
+      "turns": 4,
+      "seconds": 5.6,
+      "cost_usd": 0.0448,
+      "output_tokens": 558,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "tax",
+      "rep": 3,
+      "turns": 5,
+      "seconds": 7.2,
+      "cost_usd": 0.0475,
+      "output_tokens": 826,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "tax",
+      "rep": 3,
+      "turns": 5,
+      "seconds": 7.3,
+      "cost_usd": 0.0489,
+      "output_tokens": 893,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "tax",
+      "rep": 3,
+      "turns": 5,
+      "seconds": 8.6,
+      "cost_usd": 0.0492,
+      "output_tokens": 906,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "model",
+      "rep": 3,
+      "turns": 3,
+      "seconds": 5.0,
+      "cost_usd": 0.0416,
+      "output_tokens": 506,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": false
+    },
+    {
+      "arm": "after-rules",
+      "task": "model",
+      "rep": 3,
+      "turns": 3,
+      "seconds": 4.6,
+      "cost_usd": 0.0409,
+      "output_tokens": 393,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "model",
+      "rep": 3,
+      "turns": 3,
+      "seconds": 4.9,
+      "cost_usd": 0.0415,
+      "output_tokens": 416,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "before",
+      "task": "healthcheck",
+      "rep": 3,
+      "turns": 7,
+      "seconds": 13.1,
+      "cost_usd": 0.0647,
+      "output_tokens": 1606,
+      "denials": 3,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-rules",
+      "task": "healthcheck",
+      "rep": 3,
+      "turns": 2,
+      "seconds": 4.7,
+      "cost_usd": 0.0404,
+      "output_tokens": 540,
+      "denials": 0,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    },
+    {
+      "arm": "after-model",
+      "task": "healthcheck",
+      "rep": 3,
+      "turns": 9,
+      "seconds": 12.3,
+      "cost_usd": 0.0645,
+      "output_tokens": 1527,
+      "denials": 1,
+      "error": false,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "passed": true
+    }
+  ],
+  "summary": {
+    "overall": {
+      "before": {
+        "passed": 6,
+        "runs": 12,
+        "turns": 4.67,
+        "seconds": 7.6,
+        "cost_usd": 0.06
+      },
+      "after-rules": {
+        "passed": 9,
+        "runs": 12,
+        "turns": 3.33,
+        "seconds": 5.26,
+        "cost_usd": 0.05
+      },
+      "after-model": {
+        "passed": 12,
+        "runs": 12,
+        "turns": 5.58,
+        "seconds": 8.44,
+        "cost_usd": 0.06
+      }
+    },
+    "by_task": {
+      "timeout": {
+        "before": {
+          "passed": 0,
+          "runs": 3,
+          "turns": 3,
+          "seconds": 4.3,
+          "cost_usd": 0.06
+        },
+        "after-rules": {
+          "passed": 0,
+          "runs": 3,
+          "turns": 3,
+          "seconds": 4.17,
+          "cost_usd": 0.06
+        },
+        "after-model": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 4.33,
+          "seconds": 6.03,
+          "cost_usd": 0.06
+        }
+      },
+      "tax": {
+        "before": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 5.33,
+          "seconds": 7.73,
+          "cost_usd": 0.07
+        },
+        "after-rules": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 5,
+          "seconds": 7.47,
+          "cost_usd": 0.05
+        },
+        "after-model": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 5,
+          "seconds": 7.6,
+          "cost_usd": 0.05
+        }
+      },
+      "model": {
+        "before": {
+          "passed": 0,
+          "runs": 3,
+          "turns": 3,
+          "seconds": 5.27,
+          "cost_usd": 0.04
+        },
+        "after-rules": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 3.33,
+          "seconds": 4.97,
+          "cost_usd": 0.04
+        },
+        "after-model": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 3,
+          "seconds": 4.87,
+          "cost_usd": 0.04
+        }
+      },
+      "healthcheck": {
+        "before": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 7.33,
+          "seconds": 13.1,
+          "cost_usd": 0.06
+        },
+        "after-rules": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 2,
+          "seconds": 4.43,
+          "cost_usd": 0.04
+        },
+        "after-model": {
+          "passed": 3,
+          "runs": 3,
+          "turns": 10,
+          "seconds": 15.27,
+          "cost_usd": 0.07
+        }
+      }
+    }
+  }
+}

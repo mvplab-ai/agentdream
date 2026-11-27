@@ -8,6 +8,7 @@ import pytest
 
 from agentdream import accept, dream
 from agentdream import claude_hook as ch
+from agentdream.backends.base import LLMBackend
 from agentdream.bench import CATEGORIES, make_workload, render, run_benchmark, score
 from agentdream.cli import main
 from agentdream.config import resolve
@@ -322,3 +323,100 @@ def test_benchmark_cli(tmp_path, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["before"]["facts"] == 16 and render(data).startswith("agentdream benchmark")
     assert main(["benchmark", "--facts", "99"]) == 2
+
+
+# ------------------------------------------------------------------ benchmark: a model reads the notes
+
+class FirstNoteReader(LLMBackend):
+    """A stand-in reader that believes the first note it finds on a subject, like a hurried agent."""
+
+    name = "first-note"
+
+    def __init__(self):
+        super().__init__()
+        self.prompts = []
+
+    def complete(self, system, prompt, json_schema=None):
+        import re
+
+        self.prompts.append(prompt)
+        notes_part, questions_part = prompt.split("# Questions")
+        notes = [ln[2:] for ln in notes_part.splitlines() if ln.startswith("- ")]
+
+        def first(*needles):
+            return next((n for n in notes if all(x in n for x in needles)), "")
+
+        answers = {}
+        for qid, q in re.findall(r"^(q\d+): (.+)$", questions_part, re.M):
+            if m := re.match(r"Which port does the (.+) service listen on", q):
+                answers[qid] = "".join(re.findall(r"port (\d+)", first(m.group(1) + " service"))[:1]) or "unknown"
+            elif m := re.match(r"In which direction from the (.+) is the (.+)\? Answer", q):
+                hit = re.search(r"is (\w+) of the", first(m.group(2)))
+                answers[qid] = hit.group(1) if hit else "unknown"
+            elif m := re.match(r"Should (\w+) be used for (.+)\? Answer", q):
+                note = first(m.group(1), m.group(2))
+                answers[qid] = "no" if note.startswith("Don't") else "yes"
+            elif m := re.match(r"Which command has to be run for the (.+) module", q):
+                answers[qid] = "".join(re.findall(r"`([^`]+)`", first(m.group(1) + " module"))[:1]) or "unknown"
+            elif m := re.match(r"Which branch do changes to the (.+) component", q):
+                answers[qid] = "".join(re.findall(r"`([^`]+)`", first(m.group(1) + " component"))[:1]) or "unknown"
+        return json.dumps({"answers": answers})
+
+
+def test_every_fact_has_a_question_whose_check_accepts_only_the_truth(tmp_path):
+    wl = make_workload(tmp_path)
+    assert len({f.question for f in wl.facts}) == len(wl.facts)
+    for f in wl.facts:
+        assert f.question and not f.check("unknown") and not f.check(""), f.id
+    by_id = {f.id: f for f in wl.facts}
+    stale = by_id["stale-0"]
+    old, new = (re_port for re_port in __import__("re").findall(r"port (\d+)", " ".join(stale.notes)))
+    assert stale.check(f"Port {new}.") and not stale.check(old) and not stale.check(f"{old} or {new}")
+    assert by_id["reversal-0"].check("Yes.") and not by_id["reversal-0"].check("No, it was too slow")
+    wrong = next(f for f in wl.facts if f.category == "wrong" and "west stairwell" in f.question)
+    assert wrong.check(f"{wrong.truth} of the west stairwell") and not wrong.check("north")
+
+
+def test_reader_questions_do_not_leak_the_category(tmp_path):
+    from agentdream.bench import question_order
+
+    wl = make_workload(tmp_path)
+    asked = question_order(wl, seed=7)
+    assert [q for q, _ in asked] == [f"q{n:02d}" for n in range(1, 81)]
+    assert [f.id for _, f in asked] != [f.id for f in wl.facts]                     # shuffled
+    assert [f.id for _, f in asked] == [f.id for _, f in question_order(wl, seed=7)]  # the same every time
+    reader = FirstNoteReader()
+    run_benchmark(reader=reader)
+    for word in CATEGORIES:
+        assert word not in reader.prompts[0].split("# Questions")[1]
+
+
+def test_benchmark_reader_answers_improve_after_the_dream():
+    r = run_benchmark(reader=FirstNoteReader(), repeats=2)
+    runs = r["answers"]["runs"]
+    assert r["answers"]["repeats"] == 2 and all(len(v) == 2 for v in runs.values())
+    before, after, safe = runs["before"][0], runs["after_all"][0], runs["after_safe"][0]
+    # this reader happens to meet the newer of two stale notes first; it is misled by the 20 notes that are wrong
+    assert (before["correct"], safe["correct"], after["correct"]) == (60, 60, 80)
+    assert before["by_category"]["wrong"] == before["by_category"]["reversal"] == 0
+    assert after["by_category"] == {c: (20 if c == "control" else 10) for c in CATEGORIES}
+    assert before["unanswered"] == 0 and safe["prompt_tokens"] < before["prompt_tokens"]
+    text = render(r)
+    assert "A model answering 80 questions" in text and "| Questions answered correctly | 60.0 / 80" in text
+
+
+def test_benchmark_reader_rejects_a_reply_without_answers():
+    class Mute(FirstNoteReader):
+        def complete(self, system, prompt, json_schema=None):
+            return "I would rather not."
+
+    with pytest.raises(ValueError, match=r"JSON|answers"):
+        run_benchmark(reader=Mute())
+
+
+def test_benchmark_cli_ask_flag_is_wired(monkeypatch, capsys):
+    import agentdream.backends as backends
+
+    monkeypatch.setitem(backends._REGISTRY, "first-note", lambda model=None, **o: FirstNoteReader())
+    assert main(["benchmark", "--facts", "2", "--ask", "first-note"]) == 0
+    assert "A model answering 16 questions" in capsys.readouterr().out

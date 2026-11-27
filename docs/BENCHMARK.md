@@ -1,6 +1,96 @@
-# Does a dream improve the memory store?
+# Does a dream help?
 
-`agentdream benchmark` answers that on a store where every defect is known in advance, so the result
+Two measurements, both scored by code and neither judged by a model:
+
+1. **[Claude Code on real tasks](#claude-code-on-real-tasks)**: the same coding tasks run through the
+   actual harness with the memory file before and after a dream.
+2. **[The memory store itself](#the-memory-store-itself)**: a labelled store where every defect is
+   known in advance, scored before and after.
+
+## Claude Code on real tasks
+
+```bash
+python evals/claude_code/run.py --model sonnet --repeats 3
+```
+
+The script generates a small Python project and a `CLAUDE.md` that has drifted in five ways, plus
+three earlier sessions, in Claude Code's own transcript format, in which the agent runs into each
+problem and finds the truth:
+
+| The drifted note | The truth, as the sessions show it |
+|---|---|
+| "Runtime settings live in `config/settings.json`" | That file is a leftover nothing reads; settings are in `orders/defaults.py` |
+| "Run the test suite with `make test`" (twice, in two wordings) | The Makefile was removed; it is `python -m unittest discover -s tests` |
+| "Don't use dataclasses for new models" | The user reversed this: use dataclasses from now on |
+| "The API server listens on port 8080" next to a newer note saying 9090 | 9090 |
+
+agentdream dreams over that memory and those sessions and everything it proposes is accepted. Then
+Claude Code runs headless (`claude -p`) on four tasks in fresh copies of the project. The copies are
+identical except for `CLAUDE.md`. Each run is checked by code: the function exists and returns the right
+value, the tests pass, the setting the program actually reads has changed.
+
+Result with `claude-sonnet-5-5`, three runs per task per memory file, 36 runs in all:
+
+| Memory file | Tasks passed | Mean turns | Mean seconds | Mean cost per task |
+|---|---|---|---|---|
+| Before the dream | 6 / 12 | 4.7 | 7.6 | $0.06 |
+| After a rule-based dream (no model) | 9 / 12 | 3.3 | 5.3 | $0.05 |
+| After a model dream (`claude-cli`) | 12 / 12 | 5.6 | 8.4 | $0.06 |
+
+| Task | Before | After, rules | After, model |
+|---|---|---|---|
+| Raise the request timeout to 45 seconds | 0/3 passed | 0/3 passed | 3/3 passed |
+| Add `total_with_tax` and run the tests | 3/3, 5.3 turns | 3/3, 5 turns | 3/3, 5 turns |
+| Add an `Address` model | 0/3 passed | 3/3 passed | 3/3 passed |
+| Add a health-check script on the API port | 3/3, 7.3 turns | 3/3, 2 turns | 3/3, 10 turns |
+
+What happened in each:
+
+* **Timeout.** With the drifted note, which names `config/settings.json`, all three runs finished in
+  three turns and the program still used 30 seconds: the setting the code reads was never changed. The
+  rule-based dream does not fix this note (it cannot read "nothing reads that file" as a correction to
+  a path), so that arm fails identically. The model dream rewrote the note to name `orders/defaults.py`
+  and all three runs changed the right setting.
+* **Address model.** The drifted note says not to use dataclasses, and none of the three runs produced
+  one, against what the user had since asked for. Both dreams flip the note, and all six runs after a
+  dream produced a dataclass.
+* **Tests.** The dead `make test` note cost almost nothing: about a third of a turn on average. Every
+  run passed.
+* **Health check.** Every run passed in every arm, since the code states the port. The difference is
+  effort. With two conflicting port notes the runs took 6 to 9 turns. After the rule-based dream, with
+  one note, 2 turns each. After the model dream they took 9 to 11 turns, more than before. The likely
+  cause is an insight that dream added, telling the agent to verify noted paths, commands and ports
+  against the repo or the running service before relying on them.
+
+Read it this way:
+
+* **A dream changed outcomes, not only effort.** Half the runs failed with the drifted memory, quickly
+  and without an error from the harness. That is the cost of a wrong note.
+* **The free, offline dream recovered three of the six failures** and made the runs shorter and cheaper.
+  The remaining three need a model to read the transcripts.
+* **A model dream is not automatically more efficient.** It fixed everything, and one note it wrote made
+  the agent more cautious and slower. Review the insights a dream adds, not only its corrections.
+
+Limits of this measurement:
+
+* **Four tasks, written to run into the drift.** This shows what a wrong note costs and that a dream
+  removes the cost. It does not estimate how often your notes are wrong, and so not how much a dream
+  would help on your project.
+* **Small numbers.** Three runs per cell. The pass / fail results were the same in all three runs of
+  every cell, which is why they are worth reporting; the turn counts vary by a turn or two.
+* **One model, one harness version.** `claude-sonnet-5-5` through Claude Code 2.1.332. A stronger model
+  may check a note before trusting it.
+* **Sandboxed runs.** User-level settings, plugins and MCP servers were switched off
+  (`--setting-sources project --strict-mcp-config`) and shell access was limited to python, make and
+  read-only commands, so a few attempted commands were refused (9 with the drifted memory, 0 after the
+  rule-based dream, 4 after the model dream). That inflates turn counts a little where it happened.
+
+The raw rows, the three memory files and the operations each dream proposed are in
+[`evals/claude_code/results.json`](../evals/claude_code/results.json). The whole run cost $1.94.
+
+## The memory store itself
+
+`agentdream benchmark` scores a dream on a store where every defect is known in advance, so the result
 is scored by code, not judged by a person or a model.
 
 ```bash
@@ -13,6 +103,7 @@ agentdream benchmark --keep /tmp/bench          # keep the generated store, sess
 * [What is measured](#what-is-measured)
 * [Results: deterministic backend](#results-deterministic-backend)
 * [Results: a model backend](#results-a-model-backend)
+* [A model reading the notes](#a-model-reading-the-notes)
 * [What the benchmark found in agentdream itself](#what-the-benchmark-found-in-agentdream-itself)
 * [What this does not tell you](#what-this-does-not-tell-you)
 
@@ -124,6 +215,44 @@ This is a single run of one model, and model output varies between runs, so read
 model can do this", not as a guaranteed score. Run it yourself with `--backend claude-cli`,
 `--backend anthropic`, or `--backend ollama --model <name>`; a small local model will score lower.
 
+## A model reading the notes
+
+The scores above come from probes, which are regular expressions. `--ask` puts a model in the agent's
+place instead: it is given the notes and nothing else, and one question per fact ("Which port does the
+staging gateway service listen on?", "Should Poetry be used for dependency management?"). Its answers
+are checked by code.
+
+```bash
+agentdream benchmark --ask claude-cli --repeats 2
+```
+
+Rule-based dream, read by the default model of a Claude Code login, two runs per store:
+
+| | Before | After (all operations) | After (safe auto-apply) |
+|---|---|---|---|
+| Questions answered correctly | 60 / 80 | 80 / 80 | 60 / 80 |
+| Notes sent to the model (estimated tokens) | 3697 | 3730 | 3233 |
+
+| Category | Questions | Correct before | After (all) | After (safe) |
+|---|---|---|---|---|
+| duplicate, near_duplicate, paraphrase | 30 | 30 | 30 | 30 |
+| stale | 10 | 10 | 10 | 10 |
+| wrong | 10 | 0 | 10 | 0 |
+| reversal | 10 | 0 | 10 | 0 |
+| control | 20 | 20 | 20 | 20 |
+
+Both runs of every store gave the same counts. Three things follow:
+
+* **A capable model is not confused by duplicates or by two dated values.** It answered all 40 of those
+  questions correctly before any dream, picking the newer date itself. The probe-based score counts a
+  stale pair as unanswered; for this reader that is too pessimistic.
+* **It is misled by every wrong note.** All 20 questions about a refuted note or a reversed preference
+  were answered wrongly before the dream and correctly after. The notes are the only source it has,
+  and nothing in a wrong note says it is wrong.
+* **The safe policy does not improve this reader's answers.** It applies merges and replacements, which
+  this reader did not need. What it buys is a smaller store, 13% fewer tokens here, on every session.
+  The answers change only when the transcript-based corrections are accepted.
+
 ## What the benchmark found in agentdream itself
 
 Writing the benchmark exposed two defects in the deterministic engine of the published 0.1.0. Both are
@@ -157,9 +286,9 @@ have scored the false merges as a smaller store.
 
 ## What this does not tell you
 
-* **It is not a measurement of agent performance.** "Answered" means an agent reading the store finds
-  one correct value. Whether that makes an agent finish real tasks faster or more often has not been
-  measured here; that needs an agent run on the same tasks with the store before and after.
+* **The store score is not a measurement of agent performance.** "Answered" means an agent reading the
+  store finds one correct value. For what happens when a real agent works from the notes, see
+  [Claude Code on real tasks](#claude-code-on-real-tasks) above.
 * **The deterministic numbers are an upper bound.** The notes are template-generated plain English in
   the sentence shapes the rule-based engine parses, and the engine was fixed against this workload.
   Expect lower recall on notes written the way people actually write them. The `paraphrase` row, at
