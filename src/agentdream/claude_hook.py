@@ -267,6 +267,8 @@ class HookOptions:
     memory: str | None = None
     every: int | None = None
     apply: bool | None = None
+    apply_types: list[str] | None = None
+    apply_min_confidence: float | None = None
     config: str | None = None
     jobs_dir: str | None = None
     backend: str | None = None
@@ -281,6 +283,10 @@ class HookOptions:
             out += ["--every", str(self.every)]
         if self.apply:
             out += ["--apply"]
+        if self.apply_types:
+            out += ["--apply-types", ",".join(self.apply_types)]
+        if self.apply_min_confidence is not None:
+            out += ["--apply-min-confidence", str(self.apply_min_confidence)]
         if self.config:
             out += ["--config", self.config]
         if self.jobs_dir:
@@ -297,7 +303,8 @@ def _settings(opts: HookOptions, project: Path) -> Any:
 
     return resolve({"backend": opts.backend, "model": opts.model, "jobs_dir": opts.jobs_dir},
                    cwd=project, config_path=opts.config,
-                   cli_hook={"memory": opts.memory, "every": opts.every, "apply": opts.apply})
+                   cli_hook={"memory": opts.memory, "every": opts.every, "apply": opts.apply,
+                             "apply_types": opts.apply_types, "apply_min_confidence": opts.apply_min_confidence})
 
 
 def spawn_worker(project: Path, opts: HookOptions, log: HookLog) -> None:
@@ -394,13 +401,18 @@ def run_worker(opts: HookOptions, project: Path) -> int:
 def _run_worker(opts: HookOptions, project: Path, log: HookLog) -> bool:
     """One dream over the waiting sessions. Returns True when a dream completed."""
     from .api import dream
-    from .review import accept
+    from .review import accept, policy_split
 
     settings = _settings(opts, project)
     for w in settings.warnings:
         log(f"config: {w}")
     every = max(1, int(settings.hook.get("every") or 1))
     apply = bool(settings.hook.get("apply"))
+    types = settings.hook.get("apply_types") or None
+    min_conf = settings.hook.get("apply_min_confidence")
+    policy = "" if types is None and min_conf is None else (
+        " [policy: " + ", ".join(x for x in (f"types={','.join(types)}" if types else "",
+                                             f"confidence>={min_conf}" if min_conf is not None else "") if x) + "]")
     sdir = project / STATE_DIRNAME
     with _state_lock(sdir):
         state = _load_state(sdir)
@@ -424,7 +436,7 @@ def _run_worker(opts: HookOptions, project: Path, log: HookLog) -> bool:
     max_s = int(options.get("max_sessions") or 100)
     sessions = [s["transcript"] for s in pending][-max_s:]
     log(f"worker: dreaming over {len(sessions)} session(s) into memory {memory} (backend={backend}, "
-        f"{'APPLY' if apply else 'dry run'})")
+        f"{'APPLY' + policy if apply else 'dry run'})")
     job = dream(str(memory), sessions, backend, **options)
     ok = job.status == "completed"
     if ok:
@@ -432,9 +444,19 @@ def _run_worker(opts: HookOptions, project: Path, log: HookLog) -> bool:
         log(f"worker: job {job.id} completed: merged={c.get('merged')} replaced={c.get('replaced')} "
             f"corrected={c.get('corrected')} insights={c.get('insights')} contradictions={c.get('contradictions')}; "
             f"report: {job.out_dir / 'report.md'}")
-        if apply:
-            res = accept(job)
-            log(f"worker: applied {len(res.applied_ops)} operation(s) to {res.target} (backup: {res.backup})")
+        review = f"agentdream show {job.id} --jobs-dir {options['jobs_dir']}"
+        if apply and not job.operations:
+            log("worker: the dream proposed no changes; nothing to apply")
+        elif apply:
+            meets, below = policy_split(job.operations, types, min_conf)
+            if not meets:
+                log(f"worker: none of the {len(below)} operation(s) meet the auto-apply policy{policy}; nothing "
+                    f"applied. Review: {review}")
+            else:
+                res = accept(job, types=types, min_confidence=min_conf)
+                log(f"worker: applied {len(res.applied_ops)} operation(s) to {res.target} (backup: {res.backup})"
+                    + (f"; {len(res.skipped_ops)} left staged by the policy{policy}. Review: {review}"
+                       if res.skipped_ops else ""))
         else:
             log(f"worker: nothing applied. Review: agentdream show {job.id} --jobs-dir {options['jobs_dir']}; "
                 f"then agentdream accept {job.id} --jobs-dir {options['jobs_dir']}")
@@ -592,3 +614,51 @@ def uninstall(scope: str = "project", project: str | os.PathLike[str] | None = N
 __all__ = ["EVENTS", "FileLock", "HookLog", "HookOptions", "InstallResult", "default_memory", "hook_command",
            "install", "is_agentdream_hook", "pending_sessions", "read_payload", "run_hook", "run_worker",
            "settings_path", "uninstall"]
+
+
+# ------------------------------------------------------------------ skill
+
+SKILL_NAME = "dream"
+
+
+def skill_text() -> str:
+    """The bundled Claude Code skill (``/dream``)."""
+    return (Path(__file__).resolve().parent / "skill" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def skill_path(scope: str = "project", project: str | os.PathLike[str] | None = None) -> Path:
+    base = Path(os.path.expanduser("~")) if scope == "user" else Path(project or os.getcwd())
+    return base / ".claude" / "skills" / SKILL_NAME / "SKILL.md"
+
+
+def _is_our_skill(text: str) -> bool:
+    return "agentdream" in text and re.search(r"^name:\s*dream\s*$", text, re.M) is not None
+
+
+def install_skill(scope: str = "project", project: str | os.PathLike[str] | None = None,
+                  force: bool = False) -> InstallResult:
+    """Write the ``/dream`` skill to ``.claude/skills/dream/SKILL.md``. A file there that is not
+    agentdream's is left alone unless ``force``."""
+    path = skill_path(scope, project)
+    new = skill_text()
+    old = path.read_text(encoding="utf-8") if path.is_file() else None
+    if old == new:
+        return InstallResult(str(path), False, None, message=f"the /dream skill in {path} is already up to date")
+    if old is not None and not _is_our_skill(old) and not force:
+        raise ValueError(f"{path} exists and is not agentdream's skill; pass --force to replace it")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, new)
+    verb = "updated" if old is not None else "installed"
+    return InstallResult(str(path), True, None, message=f"{verb} the /dream skill in {path}")
+
+
+def uninstall_skill(scope: str = "project", project: str | os.PathLike[str] | None = None) -> InstallResult:
+    path = skill_path(scope, project)
+    if not path.is_file():
+        return InstallResult(str(path), False, None, message=f"no /dream skill in {path}")
+    if not _is_our_skill(path.read_text(encoding="utf-8")):
+        return InstallResult(str(path), False, None, message=f"{path} is not agentdream's skill; left as it is")
+    path.unlink()
+    with contextlib.suppress(OSError):
+        path.parent.rmdir()
+    return InstallResult(str(path), True, None, message=f"removed the /dream skill from {path}")

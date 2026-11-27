@@ -23,6 +23,7 @@ import heapq
 import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
+from difflib import SequenceMatcher
 
 from ..blocking import TokenIndex, similar_pairs
 from ..context import DreamContext, SentenceRec
@@ -35,6 +36,7 @@ from ..text import (
     Claim,
     claims_in,
     containment,
+    content_tokens,
     flip_preference,
     fold,
     is_negated,
@@ -68,6 +70,38 @@ def _clean(text: str) -> str:
     return " ".join(strip_markup(text).split())
 
 
+def _same_word(x: str, y: str) -> bool:
+    """Spelling / inflection variants of one word ("server" / "service" are not; "colour" / "color" are)."""
+    if x == y:
+        return True
+    short, long_ = (x, y) if len(x) <= len(y) else (y, x)
+    if len(short) >= 4 and long_.startswith(short):
+        return True
+    return len(short) >= 5 and ratio(x, y) >= 0.85
+
+
+def _substituted(a: str, b: str, ta: frozenset[str], tb: frozenset[str]) -> bool:
+    """True when the notes line up word for word except that one swaps in different words where
+    the other has its own: two notes of the same shape about different things. Merging them would
+    delete one of the facts, so they are never duplicates however high the token overlap is.
+
+    Words only one side has (an insertion: "before committing" / "before every commit") and
+    spelling variants don't count; only an aligned swap of unrelated words on both sides does."""
+    if not (ta - tb) or not (tb - ta):
+        return False
+    la, lb = content_tokens(a), content_tokens(b)
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, la, lb, autojunk=False).get_opcodes():
+        if tag != "replace":
+            continue
+        left = [x for x in la[i1:i2] if x not in tb]
+        right = [y for y in lb[j1:j2] if y not in ta]
+        only_left = [x for x in left if not any(_same_word(x, y) for y in right)]
+        only_right = [y for y in right if not any(_same_word(x, y) for x in left)]
+        if only_left and only_right:
+            return True
+    return False
+
+
 def _is_duplicate(a: MemoryEntry, b: MemoryEntry) -> bool:
     na, nb = normalize(a.content), normalize(b.content)
     if not na or not nb:
@@ -88,6 +122,8 @@ def _is_duplicate(a: MemoryEntry, b: MemoryEntry) -> bool:
     if ca and cb and ca.kind == cb.kind == "fact" and ca.same_subject(cb) and values_conflict(ca, cb):
         return False  # same subject, different value: a staleness question, not a duplicate
     ta, tb = token_set(a.content), token_set(b.content)
+    if _substituted(a.content, b.content, ta, tb):
+        return False  # same sentence about a different thing ("... for the billing queue" / "... for the mail queue")
     j = jaccard(ta, tb)
     if j >= 0.75:
         return True
@@ -506,6 +542,7 @@ def _verify_slot(ctx: DreamContext, entry: MemoryEntry, claim: Claim, cat: str) 
     refute: Counter[str] = Counter()
     ev_support: dict[str, list[Evidence]] = defaultdict(list)
     ev_refute: list[Evidence] = []
+    beside: dict[str, set[str]] = defaultdict(set)  # value word -> words stated next to it as true
     rivals = _rivals(ctx, entry, claim)
     for rec, prev, _pronoun in _sentence_windows(ctx, claim, rivals):
         s_pos = slots(rec.text).get(cat, set())
@@ -538,6 +575,7 @@ def _verify_slot(ctx: DreamContext, entry: MemoryEntry, claim: Claim, cat: str) 
         weight = 2 if confirm else 1
         for w in s_pos:
             support[w] += weight
+            beside[w] |= s_pos - {w}
             ev_support[w].append(Evidence.from_message(rec.msg, src_text, "supports"))
         for w in s_neg:
             refute[w] += 1
@@ -549,17 +587,20 @@ def _verify_slot(ctx: DreamContext, entry: MemoryEntry, claim: Claim, cat: str) 
     alts = [w for w in support if w not in old_words and score[w] > 0]
     if alts:
         best = max(alts, key=lambda w: (score[w], support[w], w))  # w: deterministic tie-break
-        if score[best] >= 2 and score[best] > old_score:
+        # A value word of the note that the transcripts state right next to the new value is not what
+        # was wrong: it is part of a name ("south of the west stairwell"). Keep it.
+        wrong = old_words - beside[best]
+        if wrong and score[best] >= 2 and score[best] > old_score:
             new_content = entry.content
-            for w in old_words:
+            for w in sorted(wrong):
                 new_content = replace_word(new_content, w, best)
             if new_content == entry.content:
                 new_content = f"{_clean(entry.content).rstrip('.')} — corrected: {best}"
             evidence = (ev_refute[:4] + ev_support[best][:4])
             evidence.sort(key=lambda e: (e.source_path or "", e.line_no or 0))
             return _emit_correction(ctx, entry, new_content, evidence,
-                                    f"Transcripts show '{best}', not '{'/'.join(sorted(old_words))}' "
-                                    f"({support[best]} supporting, {sum(refute[w] for w in old_words)} refuting "
+                                    f"Transcripts show '{best}', not '{'/'.join(sorted(wrong))}' "
+                                    f"({support[best]} supporting, {sum(refute[w] for w in wrong)} refuting "
                                     "observation(s)).", 0.8 if refute else 0.65)
     if sum(refute[w] for w in old_words) >= 2 and old_score < 0:
         _emit_flag(ctx, entry, ev_refute[:6],

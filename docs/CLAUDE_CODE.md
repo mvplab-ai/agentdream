@@ -1,16 +1,41 @@
 # Claude Code integration
 
-Two independent ways to use agentdream from Claude Code:
+Three independent ways to use agentdream from Claude Code. Use any one, or all three:
 
-1. **MCP server** — Claude can run, inspect and (when you ask) accept dreams.
-2. **Hook** — a dream runs automatically in the background after sessions end (opt-in, dry run by default).
+1. **`/dream` skill** — type `/dream` (or ask "clean up my memory") and Claude runs a dry-run dream,
+   walks you through the report and applies only what you approve. The quickest way to start.
+2. **Hook** — a dream runs automatically in the background after sessions end. Opt-in, a dry run by
+   default; `--safe` also keeps the memory up to date by applying the low-risk changes on its own.
+3. **MCP server** — Claude gets `dream` / `show_report` / `accept` as tools, for clients without skills.
 
-Install agentdream first:
+## Setup in two minutes
 
 ```bash
-pip install agentdream
-agentdream --version
+pip install agentdream                              # or: uv tool install agentdream
+cd ~/code/myrepo
+agentdream install-claude-skill                     # adds .claude/skills/dream/SKILL.md
+agentdream install-claude-hook --every 3 --safe     # optional: keep memory up to date automatically
 ```
+
+Then, in Claude Code (restart a running session so it picks the skill up):
+
+```text
+/dream
+```
+
+Claude finds this project's memory and recent sessions, runs `agentdream dream` (a dry run), and
+summarises the report: which duplicates it would merge, which stale values it would replace, and which
+notes the transcripts contradict, with the cited lines. Nothing is written until you say so; then it
+runs `agentdream accept` for the operations you approved. `agentdream restore <job-id>` undoes it.
+
+Which one should you use?
+
+| You want | Use |
+|---|---|
+| To clean up memory now and see every change first | `/dream` |
+| Memory that stays tidy without you thinking about it | the hook with `--safe`, plus `/dream` now and then to review what it staged |
+| Every change reviewed, but the dream already run when you look | the hook without `--safe` (dry runs), then `/dream` or `agentdream show` |
+| A client that has MCP but no skills (Cursor, others) | the MCP server |
 
 ## Where Claude Code keeps memory and sessions
 
@@ -34,7 +59,30 @@ agentdream accept <job-id>                  # backs up CLAUDE.md first
 agentdream dream --memory "$PROJ/memory" --sessions "$PROJ" --backend claude-cli   # use your Claude login as the model
 ```
 
-## 1. MCP server
+## 1. The `/dream` skill
+
+```bash
+agentdream install-claude-skill             # this project: .claude/skills/dream/SKILL.md
+agentdream install-claude-skill --user      # every project: ~/.claude/skills/dream/SKILL.md
+agentdream uninstall-claude-skill           # remove it (same --user flag)
+```
+
+The skill is a markdown file of instructions, not code: it tells Claude how to locate the memory store
+and the session files, to run the dream as a dry run, to check the cited transcript lines before
+recommending a correction, and never to run `accept` without your go-ahead. Running the installer again
+after upgrading agentdream updates the file. A `/dream` skill that is not agentdream's is left alone
+unless you pass `--force`; uninstall only ever removes agentdream's own file.
+
+Commit `.claude/skills/dream/` if you want teammates to have it; they need `agentdream` installed too.
+
+Things to ask once it is installed:
+
+* `/dream` — dream over the default memory and the last 20 sessions.
+* *"/dream over CLAUDE.md, only merges and stale values"* — the skill passes your scope along.
+* *"What did last night's dream change?"* — it reads `.agentdream/hook.log` and the latest job.
+* *"Undo the last dream"* — `agentdream restore`.
+
+## 2. MCP server
 
 ```bash
 claude mcp add agentdream -- agentdream serve-mcp                   # user-wide
@@ -56,7 +104,7 @@ Tools:
 Example prompt: *"Dream over CLAUDE.md using my last 10 sessions in ~/.claude/projects/-home-me-myrepo,
 show me the report, and accept only the corrections."*
 
-## 2. Auto-dream hook
+## 3. Auto-dream hook
 
 ```bash
 cd ~/code/myrepo
@@ -65,7 +113,8 @@ agentdream install-claude-hook --every 3                # every third session
 agentdream install-claude-hook --memory notes/agent-memory --every 5
 agentdream install-claude-hook --local                  # .claude/settings.local.json (just you)
 agentdream install-claude-hook --user                   # ~/.claude/settings.json (all projects)
-agentdream install-claude-hook --apply                  # apply automatically (backups are kept)
+agentdream install-claude-hook --safe                   # auto-apply merges and replacements only (see below)
+agentdream install-claude-hook --apply                  # apply everything automatically (backups are kept)
 agentdream install-claude-hook --event Stop             # after every response instead of at session end
 agentdream uninstall-claude-hook                        # remove it again (same --local / --user flags)
 ```
@@ -118,10 +167,53 @@ agentdream accept <job-id> --jobs-dir .agentdream/jobs
 
 Add `.agentdream/` to your `.gitignore`.
 
+### Keeping memory up to date automatically
+
+By default the hook only stages dreams. There are two ways to let it write:
+
+| Mode | Flag | Applied without you | Left staged for review |
+|---|---|---|---|
+| Review everything | *(none)* | nothing | every operation |
+| Safe auto-update | `--safe` | duplicate merges and stale-value replacements at confidence >= 0.75 | corrections, stance reversals, insights |
+| Apply everything | `--apply` | every operation | nothing |
+
+`--safe` is short for `--apply --apply-types merge,replace --apply-min-confidence 0.75`. The split
+follows what each kind of operation is based on. A merge or a replacement only reorganises what your
+notes already say: the same sentence twice, or two dated values where the newer one wins. A correction
+or a reversal rewrites a note on the strength of what a transcript appears to show, and an insight adds
+a note nobody wrote, so those wait for a person. You can set your own policy with the two flags, or in
+the config file:
+
+```toml
+[hook]
+every = 3
+apply = true
+apply_types = ["merge", "replace"]
+apply_min_confidence = 0.75
+```
+
+What an automatic update does and does not do:
+
+* A backup of the store is taken before every write, in `.agentdream/jobs/<job-id>/backups/`;
+  `agentdream restore <job-id> --jobs-dir .agentdream/jobs` puts it back.
+* The job is marked `partially_accepted`, and `hook.log` says how many operations were applied and how
+  many were left staged, with the command to review them.
+* If the memory store changed while the dream ran, nothing is applied (the next dream picks it up).
+* If no operation meets the policy, nothing is written and the dream stays pending.
+* An operation that depends on a staged one is staged with it, so the store is never left half-updated.
+
+The same policy works by hand on any dream:
+
+```bash
+agentdream accept <job-id> --types merge,replace --min-confidence 0.75
+```
+
+How much each mode fixes on a labelled store is measured in [BENCHMARK.md](BENCHMARK.md).
+
 ### Guarantees
 
 * **Opt-in**: nothing runs until you install the hook; uninstalling removes only agentdream's entry.
-* **Dry run by default**: dreams are staged for review; your memory is only changed with `--apply`.
+* **Dry run by default**: dreams are staged for review; your memory is only changed with `--safe` or `--apply`.
 * **Never blocks or fails a session**: the hook catches every error (including bad arguments — exit code 2
   would block a `Stop` hook) and always exits 0; the dream runs detached from Claude Code's process group.
 * **No double runs**: a state lock serialises session bookkeeping across concurrent hooks and a dream lock
@@ -145,7 +237,8 @@ apply = false
 memory = "CLAUDE.md"
 ```
 
-Environment overrides: `AGENTDREAM_HOOK_EVERY`, `AGENTDREAM_HOOK_APPLY`, `AGENTDREAM_HOOK_MEMORY`.
+Environment overrides: `AGENTDREAM_HOOK_EVERY`, `AGENTDREAM_HOOK_APPLY`, `AGENTDREAM_HOOK_MEMORY`,
+`AGENTDREAM_HOOK_APPLY_TYPES` (comma-separated), `AGENTDREAM_HOOK_APPLY_MIN_CONFIDENCE`.
 `AGENTDREAM_HOOK_SYNC=1` runs the dream in the foreground (for debugging the hook by hand):
 
 ```bash
