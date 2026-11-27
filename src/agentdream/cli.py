@@ -120,6 +120,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--only", help="comma-separated operation ids to apply")
     p.add_argument("--exclude", help="comma-separated operation ids to skip")
     p.add_argument("--to", help="write the result here instead of over the original store")
+    p.add_argument("--types", help="apply only these operation types, comma-separated "
+                                   "(merge, replace, correct, insight, contradiction)")
+    p.add_argument("--min-confidence", type=float, default=None,
+                   help="apply only operations at or above this confidence (0-1)")
     p.add_argument("--no-backup", action="store_true")
     p.add_argument("--force", action="store_true", help="apply even if the store changed since the dream")
     _common(p)
@@ -160,6 +164,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--every", type=int, default=None, help="dream every N sessions (default 1)")
         p.add_argument("--apply", action="store_true", default=None,
                        help="apply the dream automatically (default: dry run, review with `agentdream show`)")
+        p.add_argument("--apply-types", default=None,
+                       help="with --apply: only apply these operation types (comma-separated); the rest stays staged")
+        p.add_argument("--apply-min-confidence", type=float, default=None,
+                       help="with --apply: only apply operations at or above this confidence (0-1)")
         p.add_argument("--backend", "-b", default=None)
         p.add_argument("--model", default=None)
         _common(p)
@@ -176,6 +184,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--every", type=int, default=None, help="dream every N sessions (default 1)")
     p.add_argument("--apply", action="store_true",
                    help="apply dreams automatically (a backup is still made). Default: dry run only")
+    p.add_argument("--safe", action="store_true",
+                   help="auto-apply only the low-risk changes: --apply --apply-types merge,replace "
+                        "--apply-min-confidence 0.75; corrections and insights stay staged for review")
+    p.add_argument("--apply-types", default=None,
+                   help="with --apply: only apply these operation types (comma-separated)")
+    p.add_argument("--apply-min-confidence", type=float, default=None,
+                   help="with --apply: only apply operations at or above this confidence (0-1)")
     p.add_argument("--event", choices=["SessionEnd", "Stop"], default="SessionEnd",
                    help="SessionEnd (default, once per session) or Stop (after every response)")
     p.add_argument("--backend", "-b", default=None, help="backend for hook dreams (default: from config)")
@@ -184,6 +199,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("uninstall-claude-hook", help="remove the agentdream hook from Claude Code settings")
     _scope_args(p)
+
+    for name, text in (("install-claude-skill", "add the /dream skill to Claude Code (.claude/skills/dream)"),
+                       ("uninstall-claude-skill", "remove the /dream skill again")):
+        p = sub.add_parser(name, help=text)
+        g = p.add_mutually_exclusive_group()
+        g.add_argument("--project", dest="scope", action="store_const", const="project",
+                       help="this project's .claude/skills (default)")
+        g.add_argument("--user", dest="scope", action="store_const", const="user", help="~/.claude/skills")
+        p.set_defaults(scope="project")
+        if name.startswith("install"):
+            p.add_argument("--force", action="store_true", help="replace a /dream skill that is not agentdream's")
+
+    p = sub.add_parser("benchmark", help="score a dream on a labelled synthetic store (before / after)")
+    p.add_argument("--backend", "-b", default="deterministic")
+    p.add_argument("--model", default=None)
+    p.add_argument("--base-url", default=None, help="base URL for an OpenAI-compatible backend")
+    p.add_argument("--facts", type=int, default=10, help="facts per category (default 10; 7 categories)")
+    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--keep", help="write the generated store, sessions and staged output here")
+    p.add_argument("--json", action="store_true")
     return ap
 
 
@@ -222,6 +257,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
 
+def _types(value: str | None) -> list[str] | None:
+    return [x.strip().lower() for x in value.split(",") if x.strip()] if value else None
+
+
 def _hook_main(argv: list[str]) -> int:
     """Hooks must never fail or block the Claude session (exit code 2 would block a Stop hook),
     so even argument errors end in exit 0 with a log line."""
@@ -233,7 +272,8 @@ def _hook_main(argv: list[str]) -> int:
         HookLog(Path.cwd() / ".agentdream" / "hook.log")(f"invalid hook arguments: {argv!r}")
         return 0
     opts = HookOptions(memory=args.memory, every=args.every, apply=args.apply, config=args.config,
-                       jobs_dir=args.jobs_dir, backend=args.backend, model=args.model)
+                       jobs_dir=args.jobs_dir, backend=args.backend, model=args.model,
+                       apply_types=_types(args.apply_types), apply_min_confidence=args.apply_min_confidence)
     try:
         if args.cmd == "hook":
             return run_hook(opts)
@@ -341,7 +381,8 @@ def _run(args: argparse.Namespace) -> int:
         from .review import accept
 
         res = accept(args.job, only=args.only, exclude=args.exclude, to=args.to, backup=not args.no_backup,
-                     force=args.force, jobs_dir=_jobs_dir(args))
+                     force=args.force, jobs_dir=_jobs_dir(args), types=args.types,
+                     min_confidence=args.min_confidence)
         for w in res.warnings:
             print(f"note: {w}")
         print(f"applied {len(res.applied_ops)} operation(s) to {res.target}" +
@@ -415,20 +456,64 @@ def _run(args: argparse.Namespace) -> int:
 
     if args.cmd == "install-claude-hook":
         from .claude_hook import HookOptions, install
+        from .review import ReviewError, parse_types
 
+        apply_types = _types(args.apply_types) or (["merge", "replace"] if args.safe else None)
+        min_conf = args.apply_min_confidence if args.apply_min_confidence is not None else (0.75 if args.safe else None)
+        applying = bool(args.apply or args.safe)
+        if (apply_types or min_conf is not None) and not applying:
+            print("agentdream: error: --apply-types / --apply-min-confidence need --apply (or use --safe)",
+                  file=sys.stderr)
+            return 2
+        try:
+            parse_types(apply_types)
+            if min_conf is not None and not 0.0 <= min_conf <= 1.0:
+                raise ReviewError(f"--apply-min-confidence must be between 0 and 1, got {min_conf}")
+        except ReviewError as exc:
+            print(f"agentdream: error: {exc}", file=sys.stderr)
+            return 2
         hook_opts = HookOptions(
             memory=_abs(args.memory) if args.memory and not args.memory.startswith("stancelog:") else args.memory,
-            every=args.every, apply=bool(args.apply) or None, config=_abs(args.config), backend=args.backend,
-            model=args.model)
+            every=args.every, apply=applying or None, config=_abs(args.config), backend=args.backend,
+            model=args.model, apply_types=apply_types, apply_min_confidence=min_conf)
         installed = install(args.scope, Path.cwd(), hook_opts, event=args.event, path=args.settings)
         print(installed.message)
         print(f"  command: {installed.command}")
-        mode = "APPLY automatically (backups are kept)" if args.apply else \
-            "dry run: dreams are staged for review, nothing is applied"
+        if not applying:
+            mode = "dry run: dreams are staged for review, nothing is applied"
+        elif apply_types or min_conf is not None:
+            limits = [f"types {', '.join(apply_types)}" if apply_types else "",
+                      f"confidence >= {min_conf}" if min_conf is not None else ""]
+            mode = ("APPLY automatically only " + " and ".join(x for x in limits if x)
+                    + " (backups are kept); everything else is staged for review")
+        else:
+            mode = "APPLY automatically (backups are kept)"
         print(f"  mode: {mode}; every {args.every or 1} session(s)")
         print("  log: <project>/.agentdream/hook.log   review: agentdream list --jobs-dir <project>/.agentdream/jobs")
         print("  tip: add .agentdream/ to your .gitignore. Remove with: agentdream uninstall-claude-hook"
               + ("" if args.scope == "project" else f" --{args.scope}"))
+        return 0
+
+    if args.cmd in ("install-claude-skill", "uninstall-claude-skill"):
+        from .claude_hook import install_skill, uninstall_skill
+
+        done = (install_skill(args.scope, Path.cwd(), force=args.force) if args.cmd.startswith("install")
+                else uninstall_skill(args.scope, Path.cwd()))
+        print(done.message)
+        if args.cmd.startswith("install"):
+            print("  use it in Claude Code with: /dream   (restart a running session to pick it up)")
+        return 0
+
+    if args.cmd == "benchmark":
+        from .bench import render, run_benchmark
+
+        if not 1 <= args.facts <= 12:
+            print("agentdream: error: --facts must be between 1 and 12", file=sys.stderr)
+            return 2
+        result = run_benchmark(args.backend, args.model, per_category=args.facts, seed=args.seed,
+                               backend_options={"base_url": args.base_url} if args.base_url else None,
+                               workdir=_abs(args.keep))
+        print(json.dumps(result, indent=2) if args.json else render(result), end="" if not args.json else "\n")
         return 0
 
     if args.cmd == "uninstall-claude-hook":

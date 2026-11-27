@@ -74,6 +74,8 @@ state_file = ".agentdream/scheduler-state.json"
 every = 1
 apply = false
 memory = "CLAUDE.md"
+apply_types = ["merge", "replace"]   # with apply: only these operation types are applied
+apply_min_confidence = 0.75          # with apply: only at or above this confidence; the rest stays staged
 ```
 
 ## Environment variables
@@ -83,7 +85,7 @@ memory = "CLAUDE.md"
 | `AGENTDREAM_<FIELD>` | Any top-level, `[limits]` or `[redaction]` option by its internal name: `AGENTDREAM_BACKEND`, `AGENTDREAM_MODEL`, `AGENTDREAM_MEMORY`, `AGENTDREAM_SESSIONS` (`os.pathsep`-separated or a JSON array), `AGENTDREAM_MAX_SESSIONS`, `AGENTDREAM_MAX_CHUNK_TOKENS`, `AGENTDREAM_ON_LIMIT`, `AGENTDREAM_REDACT` (0/1), `AGENTDREAM_REDACT_EMAILS`, `AGENTDREAM_REDACT_ENTROPY`, `AGENTDREAM_ENTROPY_THRESHOLD`, `AGENTDREAM_REDACT_CARDS`, `AGENTDREAM_REDACT_PATTERNS` (JSON array) ... |
 | `AGENTDREAM_BASE_URL` | `backend_options.base_url` |
 | `AGENTDREAM_BACKEND_OPTIONS` | JSON object merged into `backend_options` |
-| `AGENTDREAM_HOOK_EVERY`, `AGENTDREAM_HOOK_APPLY`, `AGENTDREAM_HOOK_MEMORY` | Hook settings |
+| `AGENTDREAM_HOOK_EVERY`, `AGENTDREAM_HOOK_APPLY`, `AGENTDREAM_HOOK_MEMORY`, `AGENTDREAM_HOOK_APPLY_TYPES` (comma-separated or a JSON array), `AGENTDREAM_HOOK_APPLY_MIN_CONFIDENCE` | Hook settings |
 | `AGENTDREAM_CONFIG` | Use this config file instead of searching |
 | `AGENTDREAM_HOME` | Default jobs dir is `$AGENTDREAM_HOME/jobs` |
 | `AGENTDREAM_HOOK_SYNC=1` | Run hook dreams in the foreground (debugging) |

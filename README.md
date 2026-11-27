@@ -37,6 +37,7 @@ agentdream dream --memory examples/memory --sessions examples/sessions     # dry
 agentdream show <job-id>                 # the report: what changed, why, with transcript citations
 agentdream accept <job-id>               # apply it (the original is backed up first)
 agentdream accept <job-id> --only correct-2ec6281c,merge-a91fbf3a     # ...or just some operations
+agentdream accept <job-id> --types merge,replace --min-confidence 0.75  # ...or just the low-risk ones
 agentdream discard <job-id>              # ...or throw it away
 agentdream restore <job-id>              # undo an accept: put the backup back
 ```
@@ -209,6 +210,24 @@ code."*, a recurring-mistake note and a converged `pytest -q` → `git commit -m
 The report also contains a unified diff of old vs. new store, and `report.json` has the same data for
 machines. Operation ids are content hashes, so they are stable across re-runs of the same inputs.
 
+## Does it help?
+
+`agentdream benchmark` builds a store where every defect is known (duplicates, stale values, notes the
+transcripts refute, reversed preferences, paraphrases, plus controls that must not change) and scores
+it before and after a dream. 80 facts, 130 notes, 50 sessions:
+
+| | Before | Deterministic, all operations | Deterministic, `--safe` only | Model (`claude-cli`), all operations |
+|---|---|---|---|---|
+| Facts an agent would read correctly | 50/80 (62%) | 80/80 (100%) | 60/80 (75%) | 80/80 (100%) |
+| ...and stated in a single note | 20/80 (25%) | 70/80 (88%) | 50/80 (62%) | 80/80 (100%) |
+| Controls and unrelated notes intact | 30/30 | 30/30 | 30/30 | 30/30 |
+| Time | | 0.12 s | 0.12 s | 143 s |
+
+The rule-based engine fixes everything except paraphrased duplicates (0 of 10); the model catches
+those too. The notes are template-generated plain English, so treat the rule-based numbers as an upper
+bound, and note that this measures the store, not how an agent then performs on real tasks.
+Method, per-category results and limits: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**.
+
 ## How it compares
 
 agentdream is a **maintenance pass** over a memory store you already have. It is not a new memory
@@ -275,6 +294,15 @@ warning is recorded in the report). Setup details, custom backends: **[docs/BACK
 
 ## Claude Code integration
 
+**`/dream` skill** — the quickest way in. Claude runs a dry-run dream, walks you through the report
+and applies only what you approve:
+
+```bash
+agentdream install-claude-skill                   # .claude/skills/dream/SKILL.md; --user for every project
+```
+
+Then type `/dream` in Claude Code, or ask it to clean up your memory.
+
 **MCP server** — let Claude run dreams on request:
 
 ```bash
@@ -294,7 +322,16 @@ agentdream install-claude-hook --every 3          # .claude/settings.json; --loc
 
 After every third session (`SessionEnd`), a background dream runs over those sessions against the
 project's Claude memory (`~/.claude/projects/<project>/memory/`, else `CLAUDE.md`). It is a **dry run**
-unless you pass `--apply`: results land in `.agentdream/jobs/` for `agentdream list` / `show` / `accept`.
+by default: results land in `.agentdream/jobs/` for `agentdream list` / `show` / `accept`.
+
+To keep memory up to date without reviewing every dream, add `--safe`: duplicate merges and stale-value
+replacements are applied automatically (with a backup), while corrections and insights, which rest on a
+reading of a transcript, stay staged for you. `--apply` applies everything.
+
+```bash
+agentdream install-claude-hook --every 3 --safe
+```
+
 The hook returns in ~0.1 s, never blocks or fails your session, logs to `.agentdream/hook.log`, and a lock
 prevents concurrent dreams. Remove it with `agentdream uninstall-claude-hook`.
 Full setup: **[docs/CLAUDE_CODE.md](docs/CLAUDE_CODE.md)**.
@@ -423,7 +460,8 @@ by the real message text (and flagged), corrections without verifiable evidence 
 review everything before it is applied.
 
 **Can it run automatically?** Yes: `agentdream schedule` (idle / interval / every N sessions) or the
-Claude Code hook (`install-claude-hook`). Both are dry runs unless you opt in to `--apply`.
+Claude Code hook (`install-claude-hook`). Both are dry runs unless you opt in: `--apply` applies
+everything, and the hook's `--safe` applies only merges and stale-value replacements.
 
 ## Limitations
 

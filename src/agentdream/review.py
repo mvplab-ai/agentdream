@@ -23,7 +23,7 @@ from .adapters import get_adapter
 from .adapters.stancelog import strip_prefix
 from .context import DreamConfig
 from .jobs import DreamJob
-from .models import Operation
+from .models import OP_TYPES, Operation
 from .pipeline import make_redactor, materialize
 from .util import copy_path, hash_path, now_iso, remove_path
 
@@ -57,6 +57,33 @@ def _split(v: Iterable[str] | str | None) -> list[str]:
     for item in v:
         out.extend(x.strip() for x in str(item).split(",") if x.strip())
     return out
+
+
+def parse_types(types: Selection) -> list[str]:
+    """Operation types from ``"merge,replace"`` or a list; unknown names are an error."""
+    out = [t.lower() for t in _split(types)]
+    bad = [t for t in out if t not in OP_TYPES]
+    if bad:
+        raise ReviewError(f"unknown operation type(s) {', '.join(bad)} (known: {', '.join(OP_TYPES)})")
+    return out
+
+
+def policy_split(ops: list[Operation], types: Selection = None, min_confidence: float | None = None
+                 ) -> tuple[list[str], list[str]]:
+    """(ids that meet the policy, ids that don't). ``types=None`` allows every type and
+    ``min_confidence=None`` every confidence, so no policy means everything passes."""
+    allowed = parse_types(types) if types is not None else None
+    if types is not None and not allowed:
+        raise ReviewError("--types was given but names no operation type (omit it to allow every type)")
+    if min_confidence is not None and not 0.0 <= float(min_confidence) <= 1.0:
+        raise ReviewError(f"min confidence must be between 0 and 1, got {min_confidence}")
+    ok: list[str] = []
+    rest: list[str] = []
+    for o in ops:
+        good = (allowed is None or o.type in allowed) and (min_confidence is None
+                                                           or o.confidence >= float(min_confidence))
+        (ok if good else rest).append(o.id)
+    return ok, rest
 
 
 def _match_ids(ops: list[Operation], wanted: list[str]) -> list[str]:
@@ -186,7 +213,10 @@ def _target_lock(job: DreamJob, target: Path):  # type: ignore[no-untyped-def]
 
 def accept(job: DreamJob | str, only: Selection = None, exclude: Selection = None,
            to: str | os.PathLike[str] | None = None, backup: bool = True, force: bool = False,
-           jobs_dir: str | os.PathLike[str] | None = None) -> AcceptResult:
+           jobs_dir: str | os.PathLike[str] | None = None, types: Selection = None,
+           min_confidence: float | None = None) -> AcceptResult:
+    """Apply a dream. ``types`` / ``min_confidence`` are a policy on top of ``only`` / ``exclude``:
+    operations of another type or below the confidence are left staged (with their dependents)."""
     if isinstance(job, str):
         job = DreamJob.load(job, jobs_dir)
     if job.status != "completed":
@@ -202,10 +232,18 @@ def accept(job: DreamJob | str, only: Selection = None, exclude: Selection = Non
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise ReviewError(f"job {job.id}: its operations.json / snapshot.json is missing or corrupt ({exc}); "
                           "re-run the dream") from exc
+    if types is not None or min_confidence is not None:
+        _, below = policy_split(ops, types, min_confidence)
+        if only is not None:
+            hit = sorted(set(_match_ids(ops, _split(only))) & set(below))
+            if hit:
+                raise ReviewError(f"--only names {', '.join(hit)}, which the --types / --min-confidence policy "
+                                  "excludes; drop one of the two")
+        exclude = [*_split(exclude), *below]
     selected, warnings = select_operations(ops, only, exclude)
     if ops and not selected:
-        raise ReviewError("no operations selected by --only/--exclude; nothing to apply (to drop the whole dream "
-                          "use `agentdream discard JOB`)")
+        raise ReviewError("no operations selected by --only/--exclude/--types/--min-confidence; nothing to apply "
+                          "(to drop the whole dream use `agentdream discard JOB`)")
     final = materialize(original, selected, make_redactor(cfg))
 
     src = Path(strip_prefix(str(cfg.memory)))

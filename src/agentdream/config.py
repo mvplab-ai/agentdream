@@ -50,6 +50,8 @@ resolved against the file's directory. File format (all keys optional)::
     every = 1                        # dream every N sessions
     apply = false                    # true = accept automatically (a backup is still made)
     memory = "CLAUDE.md"             # overrides the top-level memory for the hook
+    apply_types = ["merge", "replace"]   # with apply: only these operation types are applied...
+    apply_min_confidence = 0.75      # ...and only at or above this confidence; the rest stays staged
 
 Environment variables: ``AGENTDREAM_<FIELD>`` for any top-level / [limits] / [redaction]
 field using its DreamConfig name (``AGENTDREAM_BACKEND``, ``AGENTDREAM_MAX_CHUNK_TOKENS``,
@@ -85,7 +87,8 @@ _LIMITS = ("max_sessions", "min_sessions", "max_bytes_per_transcript", "max_tota
            "max_chunk_tokens", "chunk_overlap", "max_chunks", "insight_min_sessions", "max_insights")
 _PATH_FIELDS = ("memory", "out", "jobs_dir")
 _SCHEDULE = {"every": str, "idle": str, "new_sessions": int, "poll": str, "state_file": str}
-_HOOK = {"every": int, "apply": bool, "memory": str, "event": str, "sessions": list}
+_HOOK = {"every": int, "apply": bool, "memory": str, "event": str, "sessions": list,
+         "apply_types": list, "apply_min_confidence": float}
 
 _DREAM_FIELDS = {f.name: f for f in fields(DreamConfig)}
 _BOOL_TRUE = {"1", "true", "yes", "on"}
@@ -253,7 +256,7 @@ def parse_config(data: Mapping[str, Any], where: str, base: Path) -> tuple[dict,
         elif key == "hook" and isinstance(value, dict):
             for k, v in value.items():
                 if k in _HOOK:
-                    t = {int: "int", bool: "bool", str: "str", list: "list"}[_HOOK[k]]
+                    t = {int: "int", bool: "bool", str: "str", list: "list", float: "float"}[_HOOK[k]]
                     hook[k] = coerce("sessions" if k == "sessions" else k, v, f"{where} [hook]", t)
                 else:
                     warnings.append(f"{where}: unknown key hook.{k}")
@@ -291,10 +294,14 @@ def env_config(environ: Mapping[str, str] | None = None) -> tuple[dict, dict]:
     for k in _PATH_FIELDS:
         if dream.get(k):
             dream[k] = _resolve_path(dream[k], cwd)
-    for k, t in (("every", "int"), ("apply", "bool"), ("memory", "str")):
+    for k, t in (("every", "int"), ("apply", "bool"), ("memory", "str"), ("apply_min_confidence", "float")):
         var = f"AGENTDREAM_HOOK_{k.upper()}"
         if var in env:
             hook[k] = coerce(k, env[var], f"${var}", t)
+    if "AGENTDREAM_HOOK_APPLY_TYPES" in env:  # comma-separated or a JSON array
+        raw = env["AGENTDREAM_HOOK_APPLY_TYPES"].strip()
+        hook["apply_types"] = (coerce("apply_types", raw, "$AGENTDREAM_HOOK_APPLY_TYPES", "list")
+                               if raw.startswith("[") else [x.strip() for x in raw.split(",") if x.strip()])
     if hook.get("memory"):
         hook["memory"] = _resolve_path(hook["memory"], cwd)
     return dream, hook

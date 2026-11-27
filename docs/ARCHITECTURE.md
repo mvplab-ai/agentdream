@@ -266,10 +266,12 @@ stateDiagram-v2
 | `backends/builtin.py` | `deterministic`, `anthropic`, `openai` (compatible), `claude-cli`. |
 | `backends/__init__.py` | Backend registry, aliases (`ollama`, `lmstudio`, ...), `agentdream.backends` entry points. |
 | `jobs.py` | `DreamJob`: statuses, background thread, cancel (in-process and via `job.json`), persisted state, results. |
-| `review.py` | `accept` (all / `only` / `exclude` with dependency closure, backup, lock, atomic swap with rollback), `discard`, `restore`. |
+| `review.py` | `accept` (all / `only` / `exclude` with dependency closure, a `types` / `min_confidence` policy, backup, lock, atomic swap with rollback), `discard`, `restore`. |
 | `report.py` | Report sections and counts, markdown rendering, unified diff (per file for text stores). |
 | `scheduler.py` | Idle / interval / every-N-sessions triggers with persisted state and injectable clock. |
-| `claude_hook.py` | Claude Code hook: stdin payload, gating, locks, detached worker, settings.json installer. |
+| `claude_hook.py` | Claude Code hook: stdin payload, gating, locks, detached worker, auto-apply policy, settings.json installer; installer for the `/dream` skill. |
+| `skill/SKILL.md` | The bundled Claude Code skill (`/dream`): instructions, not code. |
+| `bench.py` | Labelled synthetic workload and before / after scoring (`agentdream benchmark`). See [BENCHMARK.md](BENCHMARK.md). |
 | `mcp_server.py` | JSON-RPC 2.0 MCP server over stdio (newline-delimited), six tools. |
 | `util.py` | Atomic writes, tree hashing, durations, timestamps, token estimate. |
 
@@ -441,7 +443,8 @@ marks the job `restored`; the store then matches the dream's input again, so it 
 * **Claude Code hook** (`claude_hook.py`): see [CLAUDE_CODE.md](CLAUDE_CODE.md). `hook` records the session
   under a short state lock and starts a detached `hook-worker` once `every` sessions are waiting; the
   worker holds a non-blocking dream lock, dreams (dry run unless `apply`), marks sessions done, retries
-  failures up to three times and re-checks for sessions that ended mid-dream.
+  failures up to three times and re-checks for sessions that ended mid-dream. With `apply`, an optional
+  policy (`apply_types`, `apply_min_confidence`) limits what is written; the rest stays staged.
 
 ## Extension points
 
