@@ -5,7 +5,7 @@
     print(job.report["counts"])
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from .adapters import MemoryAdapter, available_adapters, get_adapter, register_adapter
 from .api import dream, dream_async, make_config

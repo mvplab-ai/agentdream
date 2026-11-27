@@ -10,7 +10,7 @@
 
 Website: **[agentdream.dev](https://agentdream.dev)**
 
-![A 25-second terminal highlight: agentdream runs a dry-run dream, shows a cited correction in the report, then applies it on accept. The original store stays unchanged until you accept.](docs/demo.gif)
+![A 25-second terminal highlight: agentdream runs a dry-run dream, shows a cited correction in the report, then applies it on accept. The original store stays unchanged until you accept.](https://raw.githubusercontent.com/mvplab-ai/agentdream/main/docs/demo.gif)
 
 The GIF is a highlight of a real terminal run with the `claude-cli` backend (your Claude Code login, no API key). The quickstart below uses the bundled example and the deterministic backend, so it works offline with no model.
 
@@ -54,61 +54,9 @@ SQLite database or `stancelog:<path>`; `--sessions` takes transcript files, fold
 Entry points share one config and one pipeline. Memory and transcripts are read-only — the input
 store is never modified. The pipeline writes a staged store and a report; nothing is applied until
 you accept, which takes a backup first so you can restore. Full diagrams and the module map:
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Static images of the figure below:
-[SVG](docs/architecture.svg) · [PNG](docs/architecture.png).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-```mermaid
-flowchart TB
-  subgraph entry["Entry points"]
-    direction LR
-    cli["CLI"]
-    py["Python API"]
-    mcp["MCP server"]
-    sched["Scheduler"]
-    hook["Claude Code hook"]
-    cli ~~~ py ~~~ mcp ~~~ sched ~~~ hook
-  end
-
-  cfg["Config"]
-
-  subgraph sources["Read-only inputs"]
-    direction LR
-    mem["Memory adapters"]
-    original[("Input store never modified")]
-    tx["Transcript loaders"]
-    mem ~~~ original ~~~ tx
-  end
-
-  subgraph pipe["Dream pipeline"]
-    direction TB
-    subgraph prep["Prepare"]
-      direction LR
-      load["load"] --> redact["redact"] --> limits["limits"]
-    end
-    subgraph analyze["Consolidate, verify, insights"]
-      direction LR
-      cons["consolidate"] --> verify["verify"] --> insights["insights"]
-    end
-    write["write"]
-    limits --> cons
-    insights --> write
-  end
-
-  subgraph engines["Engines"]
-    direction LR
-    det["Deterministic"]
-    llm["LLM backends"]
-    det ~~~ llm
-  end
-
-  staged["Staged store and report"] --> review["Accept, discard, or restore"] --> backup["Backup of the target"]
-
-  entry --> cfg
-  cfg --> load
-  sources --> load
-  analyze --> engines
-  write --> staged
-```
+![agentdream architecture: entry points share one config and one pipeline; memory and transcripts are read-only inputs; the pipeline writes a staged store and report; accept takes a backup first.](https://raw.githubusercontent.com/mvplab-ai/agentdream/main/docs/architecture.png)
 
 ## How it works
 
@@ -214,21 +162,34 @@ machines. Operation ids are content hashes, so they are stable across re-runs of
 
 ## Does it help?
 
-`agentdream benchmark` builds a store where every defect is known (duplicates, stale values, notes the
-transcripts refute, reversed preferences, paraphrases, plus controls that must not change) and scores
-it before and after a dream. 80 facts, 130 notes, 50 sessions:
+**On Claude Code itself.** Four coding tasks, run headless through Claude Code (`claude-sonnet-5-5`)
+in copies of a project that differ only in `CLAUDE.md`: the drifted notes, the notes after a rule-based
+dream, and the notes after a model dream. Three runs each, checked by code:
+
+| Memory file | Tasks passed | Mean turns | Mean cost per task |
+|---|---|---|---|
+| Before the dream | 6 / 12 | 4.7 | $0.06 |
+| After a rule-based dream (no model) | 9 / 12 | 3.3 | $0.05 |
+| After a model dream | 12 / 12 | 5.6 | $0.06 |
+
+With a note pointing at the wrong file, every run changed nothing the program reads and finished
+anyway. The tasks were written to run into the drift, so this shows what a wrong note costs and that
+a dream removes it, not how often your notes are wrong. A model dream also made one task slower by
+adding a cautious insight. Reproduce it with `python evals/claude_code/run.py`.
+
+**On the memory store.** `agentdream benchmark` builds a store where every defect is known (duplicates,
+stale values, notes the transcripts refute, reversed preferences, paraphrases, plus controls that must
+not change) and scores it before and after a dream. 80 facts, 130 notes, 50 sessions:
 
 | | Before | Deterministic, all operations | Deterministic, `--safe` only | Model (`claude-cli`), all operations |
 |---|---|---|---|---|
 | Facts an agent would read correctly | 50/80 (62%) | 80/80 (100%) | 60/80 (75%) | 80/80 (100%) |
 | ...and stated in a single note | 20/80 (25%) | 70/80 (88%) | 50/80 (62%) | 80/80 (100%) |
 | Controls and unrelated notes intact | 30/30 | 30/30 | 30/30 | 30/30 |
-| Time | | 0.12 s | 0.12 s | 143 s |
 
 The rule-based engine fixes everything except paraphrased duplicates (0 of 10); the model catches
 those too. The notes are template-generated plain English, so treat the rule-based numbers as an upper
-bound, and note that this measures the store, not how an agent then performs on real tasks.
-Method, per-category results and limits: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**.
+bound. Method, per-task and per-category results, and limits: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**.
 
 ## How it compares
 

@@ -17,3 +17,6 @@ htmlcov/
 
 # Cloudflare CLI local cache (account id and name)
 .cloudflare/
+
+# evaluation scratch
+evals/**/runs/

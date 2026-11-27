@@ -218,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--facts", type=int, default=10, help="facts per category (default 10; 7 categories)")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--keep", help="write the generated store, sessions and staged output here")
+    p.add_argument("--ask", metavar="BACKEND", default=None,
+                   help="also ask a model one question per fact, given only the notes, before and after the dream "
+                        "(e.g. claude-cli, anthropic, ollama)")
+    p.add_argument("--ask-model", default=None, help="model for --ask")
+    p.add_argument("--repeats", type=int, default=1, help="repeat each --ask call N times (model answers vary)")
     p.add_argument("--json", action="store_true")
     return ap
 
@@ -512,7 +517,8 @@ def _run(args: argparse.Namespace) -> int:
             return 2
         result = run_benchmark(args.backend, args.model, per_category=args.facts, seed=args.seed,
                                backend_options={"base_url": args.base_url} if args.base_url else None,
-                               workdir=_abs(args.keep))
+                               workdir=_abs(args.keep), reader=args.ask, reader_model=args.ask_model,
+                               repeats=args.repeats)
         print(json.dumps(result, indent=2) if args.json else render(result), end="" if not args.json else "\n")
         return 0
 

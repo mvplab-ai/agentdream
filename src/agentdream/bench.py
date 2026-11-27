@@ -72,6 +72,8 @@ class Fact:
     truth: str
     probe: Callable[[str], str | None]  # note text (history stripped) -> the value it asserts, or None
     notes: list[str] = field(default_factory=list)  # the notes written to the store for this fact
+    question: str = ""                                # what a reader of the store is asked about this fact
+    check: Callable[[str], bool] = lambda answer: False  # is a free-text answer the true one?
 
 
 @dataclass
@@ -110,6 +112,35 @@ def _presence_probe(*needles: str) -> Callable[[str], str | None]:
     return probe
 
 
+_BRANCHES = ("release", "stable", "production", "deploy")
+
+
+def _port_check(port: int | str) -> Callable[[str], bool]:
+    return lambda answer: re.findall(r"\d{3,5}", answer) == [str(port)]
+
+
+def _direction_check(truth: str, place: str) -> Callable[[str], bool]:
+    def check(answer: str) -> bool:
+        said = re.sub(re.escape(place), " ", answer.lower())  # "west stairwell" is a name, not an answer
+        return set(re.findall(r"\b(north|south|east|west)\b", said)) == {truth}
+    return check
+
+
+def _yes_check(answer: str) -> bool:
+    return re.match(r"\W*yes\b", answer.strip().lower()) is not None
+
+
+def _command_check(cmd: str) -> Callable[[str], bool]:
+    squash = lambda s: re.sub(r"[`\s]+", " ", s.lower()).strip()  # noqa: E731
+    return lambda answer: squash(cmd) in squash(answer)
+
+
+def _branch_check(branch: str) -> Callable[[str], bool]:
+    def check(answer: str) -> bool:
+        return set(re.findall(r"\b(" + "|".join(_BRANCHES) + r")\b", answer.lower())) == {branch}
+    return check
+
+
 def make_workload(root: Path, per_category: int = 10, seed: int = 7) -> Workload:
     """Write a labelled memory folder and transcripts under ``root``."""
     rng = random.Random(seed)
@@ -131,23 +162,32 @@ def make_workload(root: Path, per_category: int = 10, seed: int = 7) -> Workload
     def port_probe(name: str) -> Callable[[str], str | None]:
         return _regex_probe(rf"\b{re.escape(name)} service\b.*?\bport (\d+)")
 
+    def port_q(name: str) -> str:
+        return f"Which port does the {name} service listen on?"
+
+    def where_q(thing: str, place: str) -> str:
+        return f"In which direction from the {place} is the {thing}? Answer north, south, east or west."
+
     for i in range(per_category):
         # duplicate: word for word, in two files
         name, port = next(names), rng.randint(1100, 9900)
         line = f"The {name} service listens on port {port}."
-        add(Fact(f"duplicate-{i}", "duplicate", str(port), port_probe(name)),
+        add(Fact(f"duplicate-{i}", "duplicate", str(port), port_probe(name), question=port_q(name),
+                 check=_port_check(port)),
             [("services.md", line), ("notes/misc.md", line)])
 
         # near duplicate: small wording differences
         name = next(names)
         cmd = rng.choice(("pytest -q", "make lint", "ruff check .", "npm test", "cargo test", "go vet ./..."))
-        add(Fact(f"near_duplicate-{i}", "near_duplicate", "stated", _presence_probe(name, cmd)),
+        add(Fact(f"near_duplicate-{i}", "near_duplicate", "stated", _presence_probe(name, cmd),
+                 question=f"Which command has to be run for the {name} module before committing?",
+                 check=_command_check(cmd)),
             [("workflow.md", f"Run `{cmd}` for the {name} module before committing."),
              ("notes/misc.md", f"Run `{cmd}` for the {name} module before every commit.")])
 
         # stale: two dated values, the newer one is true
         name, old, new = next(names), rng.randint(1100, 5000), rng.randint(5100, 9900)
-        add(Fact(f"stale-{i}", "stale", str(new), port_probe(name)),
+        add(Fact(f"stale-{i}", "stale", str(new), port_probe(name), question=port_q(name), check=_port_check(new)),
             [("services.md", f"The {name} service listens on port {old}. (2025-11-0{1 + i % 9})"),
              ("notes/infra.md", f"The {name} service listens on port {new}. (2026-02-1{i % 10})")])
 
@@ -158,7 +198,8 @@ def make_workload(root: Path, per_category: int = 10, seed: int = 7) -> Workload
         right = _OPPOSITE[wrong]
         thing = f"{name} kiosk"
         add(Fact(f"wrong-{i}", "wrong", right,
-                 _regex_probe(rf"\b{re.escape(thing)}\b.*?\b(north|south|east|west) of the {re.escape(place)}")),
+                 _regex_probe(rf"\b{re.escape(thing)}\b.*?\b(north|south|east|west) of the {re.escape(place)}"),
+                 question=where_q(thing, place), check=_direction_check(right, place)),
             [("places.md", f"The {thing} is {wrong} of the {place}. (2026-01-0{1 + i % 9})")])
         for _ in range(2):
             sessions.append([
@@ -176,7 +217,8 @@ def make_workload(root: Path, per_category: int = 10, seed: int = 7) -> Workload
 
         # reversal: the user changes their mind in a session
         tool, task = stances[i]
-        add(Fact(f"reversal-{i}", "reversal", "use", _stance_probe(tool, task)),
+        add(Fact(f"reversal-{i}", "reversal", "use", _stance_probe(tool, task),
+                 question=f"Should {tool} be used for {task}? Answer yes or no.", check=_yes_check),
             [("tooling.md", f"Don't use {tool} for {task} — it was too slow on CI. (2026-01-1{i % 10})")])
         sessions.append([
             ("user", f"The new {tool} release fixed the slowness. Actually, let's use {tool} for {task} from now on."),
@@ -185,20 +227,24 @@ def make_workload(root: Path, per_category: int = 10, seed: int = 7) -> Workload
 
         # paraphrase: one fact, two unrelated wordings
         name = next(names)
-        branch = rng.choice(("release", "stable", "production", "deploy"))
-        add(Fact(f"paraphrase-{i}", "paraphrase", "stated", _presence_probe(name, f"`{branch}`")),
+        branch = rng.choice(_BRANCHES)
+        add(Fact(f"paraphrase-{i}", "paraphrase", "stated", _presence_probe(name, f"`{branch}`"),
+                 question=f"Which branch do changes to the {name} component have to go through?",
+                 check=_branch_check(branch)),
             [("workflow.md", f"Deploys of the {name} component go through the `{branch}` branch."),
              ("notes/misc.md", f"To ship the {name} component, merge your change into `{branch}` first.")])
 
         # control: a correct note, and a correct note the transcripts confirm
         name, port = next(names), rng.randint(1100, 9900)
-        add(Fact(f"control-{i}a", "control", str(port), port_probe(name)),
+        add(Fact(f"control-{i}a", "control", str(port), port_probe(name), question=port_q(name),
+                 check=_port_check(port)),
             [("services.md", f"The {name} service listens on port {port}.")])
         name = next(names)
         place, direction = places[(i + 5) % len(places)]
         thing = f"{name} kiosk"
         add(Fact(f"control-{i}b", "control", direction,
-                 _regex_probe(rf"\b{re.escape(thing)}\b.*?\b(north|south|east|west) of the {re.escape(place)}")),
+                 _regex_probe(rf"\b{re.escape(thing)}\b.*?\b(north|south|east|west) of the {re.escape(place)}"),
+                 question=where_q(thing, place), check=_direction_check(direction, place)),
             [("places.md", f"The {thing} is {direction} of the {place}.")])
         sessions.append([
             ("user", f"Check on the {thing}."),
@@ -261,6 +307,55 @@ def score(workload: Workload, entries: list[MemoryEntry]) -> dict[str, Any]:
     }
 
 
+READER_SYSTEM = (
+    "You are an agent starting a new session on a project. Everything you know about the project is in the notes "
+    "below, written during earlier sessions. Answer each question from the notes, the way you would if you had to "
+    "act on the answer right now. Give exactly one short answer per question: no hedging, no alternatives, no "
+    'explanation. If the notes do not say, answer "unknown". Reply with JSON only, in this shape: '
+    '{"answers": {"q01": "...", "q02": "..."}}'
+)
+_ANSWERS_SCHEMA = {"type": "object", "required": ["answers"],
+                   "properties": {"answers": {"type": "object", "additionalProperties": {"type": "string"}}}}
+
+
+def render_store(entries: list[MemoryEntry]) -> str:
+    """The store as an agent would have it in context: one bullet per note, grouped by file."""
+    by_file: dict[str, list[str]] = {}
+    for e in entries:
+        by_file.setdefault(e.path or "notes", []).append(e.content.strip())
+    return "\n\n".join(f"## {path}\n" + "\n".join(f"- {n}" for n in notes) for path, notes in by_file.items())
+
+
+def question_order(workload: Workload, seed: int) -> list[tuple[str, Fact]]:
+    """Questions in a fixed shuffled order, under ids that say nothing about the category."""
+    facts = list(workload.facts)
+    random.Random(seed * 7919 + 1).shuffle(facts)
+    return [(f"q{n + 1:02d}", f) for n, f in enumerate(facts)]
+
+
+def ask(backend: Any, workload: Workload, entries: list[MemoryEntry], seed: int) -> dict[str, Any]:
+    """One model call: every question about one store. Returns counts of true answers."""
+    from .engine.llm import parse_json_loose
+
+    asked = question_order(workload, seed)
+    prompt = ("# Notes\n\n" + render_store(entries) + "\n\n# Questions\n\n"
+              + "\n".join(f"{qid}: {f.question}" for qid, f in asked))
+    data = parse_json_loose(backend.complete(READER_SYSTEM, prompt, _ANSWERS_SCHEMA))
+    answers = data.get("answers") if isinstance(data, dict) else None
+    if not isinstance(answers, dict):
+        raise ValueError("the reader model did not return {\"answers\": {...}}")
+    per_cat = dict.fromkeys(CATEGORIES, 0)
+    missing = 0
+    for qid, f in asked:
+        got = answers.get(qid)
+        if got is None:
+            missing += 1
+        elif f.check(str(got)):
+            per_cat[f.category] += 1
+    return {"correct": sum(per_cat.values()), "by_category": per_cat, "unanswered": missing,
+            "prompt_tokens": estimate_tokens(prompt)}
+
+
 def _apply(original: list[MemoryEntry], ops: list[Operation], safe: bool) -> tuple[list[MemoryEntry], int]:
     if safe:
         _, below = policy_split(ops, SAFE_TYPES, SAFE_MIN_CONFIDENCE)
@@ -270,8 +365,13 @@ def _apply(original: list[MemoryEntry], ops: list[Operation], safe: bool) -> tup
 
 def run_benchmark(backend: str = "deterministic", model: str | None = None, per_category: int = 10, seed: int = 7,
                   backend_options: dict[str, Any] | None = None, workdir: str | Path | None = None,
+                  reader: Any = None, reader_model: str | None = None, repeats: int = 1,
                   **options: Any) -> dict[str, Any]:
-    """Generate the workload, dream over it, and score before / after."""
+    """Generate the workload, dream over it, and score before / after.
+
+    With ``reader`` (a backend name or instance) a model is also asked one question per fact, given
+    only the notes: once for the original store, once after every operation, once after the safe
+    ones. ``repeats`` repeats each of those calls, because model answers vary."""
     with tempfile.TemporaryDirectory(prefix="agentdream-bench-") as tmp:
         root = Path(workdir) if workdir else Path(tmp)
         root.mkdir(parents=True, exist_ok=True)
@@ -287,7 +387,19 @@ def run_benchmark(backend: str = "deterministic", model: str | None = None, per_
         by_type: dict[str, int] = {}
         for o in ctx.ops:
             by_type[o.type] = by_type.get(o.type, 0) + 1
+        answers: dict[str, Any] | None = None
+        if reader is not None:
+            from .backends import get_backend
+
+            rb = get_backend(reader, reader_model, **(dict(backend_options or {}) if reader == backend else {}))
+            stores = {"before": original, "after_all": after_all, "after_safe": after_safe}
+            runs: dict[str, list[dict[str, Any]]] = {k: [] for k in stores}
+            for _ in range(max(1, repeats)):
+                for key, entries in stores.items():
+                    runs[key].append(ask(rb, wl, entries, seed))
+            answers = {"reader": rb.describe(), "repeats": max(1, repeats), "questions": len(wl.facts), "runs": runs}
         return {
+            "answers": answers,
             "backend": ctx.backend.describe() if ctx.backend else "deterministic",
             "seed": seed, "per_category": per_category,
             "sessions": len(ctx.transcripts), "seconds": round(seconds, 2),
@@ -331,9 +443,31 @@ def render(result: dict[str, Any]) -> str:
     for c in CATEGORIES:
         rb, ra, rs = b["by_category"][c], a["by_category"][c], s["by_category"][c]
         out.append(f"| {c} | {rb['facts']} | {rb['clean']} | {ra['clean']} | {rs['clean']} |")
+    ans = result.get("answers")
+    if ans:
+        n, runs = ans["questions"], ans["runs"]
+
+        def cell(key: str, cat: str | None = None) -> str:
+            got = [r["by_category"][cat] if cat else r["correct"] for r in runs[key]]
+            mean = sum(got) / len(got)
+            spread = f" (runs: {', '.join(str(g) for g in got)})" if len(got) > 1 and not cat else ""
+            return (f"{mean:.1f}" if len(got) > 1 else f"{got[0]}") + (f" / {n}{spread}" if not cat else "")
+
+        out += ["", f"A model answering {n} questions from the notes alone — reader: {ans['reader']}, "
+                    f"{ans['repeats']} run(s) per store",
+                "", "| | Before | After (all operations) | After (safe auto-apply) |", "|---|---|---|---|",
+                f"| Questions answered correctly | {cell('before')} | {cell('after_all')} | {cell('after_safe')} |",
+                f"| Notes sent to the model (estimated tokens) | {runs['before'][0]['prompt_tokens']} | "
+                f"{runs['after_all'][0]['prompt_tokens']} | {runs['after_safe'][0]['prompt_tokens']} |"]
+        totals = {c: result["before"]["by_category"][c]["facts"] for c in CATEGORIES}
+        out += ["", "| Category | Questions | Correct before | Correct after (all) | Correct after (safe) |",
+                "|---|---|---|---|---|"]
+        out += [f"| {c} | {totals[c]} | {cell('before', c)} | {cell('after_all', c)} | {cell('after_safe', c)} |"
+                for c in CATEGORIES]
     for w in result["warnings"]:
         out.append(f"\nwarning: {w}")
     return "\n".join(out) + "\n"
 
 
-__all__ = ["CATEGORIES", "Fact", "Workload", "make_workload", "render", "run_benchmark", "score"]
+__all__ = ["CATEGORIES", "Fact", "Workload", "ask", "make_workload", "question_order", "render", "render_store",
+           "run_benchmark", "score"]

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The `main` branch and the latest tagged release (currently `0.1.1`) are supported for security fixes.
+The `main` branch and the latest tagged release (currently `0.1.2`) are supported for security fixes.
 
 ## Reporting a vulnerability
 
