@@ -24,6 +24,8 @@ def build() -> str:
 <meta property="og:description" content="Your agent's notes, checked against what actually happened. \
 Local-first memory consolidation with cited corrections.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://agentdream.dev/">
+<link rel="canonical" href="https://agentdream.dev/">
 {head}
 </head>
 <body style="margin:0">

@@ -8,6 +8,8 @@
 
 **Sleep-time memory consolidation ("dreaming") for any agent and any model — local-first, reviewable, zero dependencies.**
 
+Website: **[agentdream.dev](https://agentdream.dev)**
+
 ![A 25-second terminal highlight: agentdream runs a dry-run dream, shows a cited correction in the report, then applies it on accept. The original store stays unchanged until you accept.](docs/demo.gif)
 
 The GIF is a highlight of a real terminal run with the `claude-cli` backend (your Claude Code login, no API key). The quickstart below uses the bundled example and the deterministic backend, so it works offline with no model.

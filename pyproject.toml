@@ -37,7 +37,7 @@ dev = ["pytest>=7", "pytest-cov>=4", "coverage[toml]>=7", "ruff>=0.6", "mypy>=1.
 agentdream = "agentdream.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/mvplab-ai/agentdream"
+Homepage = "https://agentdream.dev"
 Repository = "https://github.com/mvplab-ai/agentdream"
 Documentation = "https://github.com/mvplab-ai/agentdream#60-second-quickstart"
 Issues = "https://github.com/mvplab-ai/agentdream/issues"

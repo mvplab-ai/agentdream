@@ -1,6 +1,6 @@
 name: Site
 
-# Publishes site/ to GitHub Pages. Enable once in Settings > Pages > Source: GitHub Actions.
+# Publishes site/ to GitHub Pages, served at https://agentdream.dev (custom domain set in Settings > Pages).
 on:
   push:
     branches: [main]
