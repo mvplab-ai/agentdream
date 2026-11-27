@@ -66,7 +66,8 @@ ins { color: var(--trace); text-decoration: none; }
 /* the opening correction */
 .open { padding-block: clamp(1.5rem, 5vw, 4rem) 3.5rem; display: grid; gap: 2.2rem; }
 .open h1 { font-size: clamp(2.7rem, 8.6vw, 6.6rem); line-height: 1.0; letter-spacing: -0.028em; max-width: 13ch; }
-.open h1 ins { font-style: italic; }
+.open .note { font-size: clamp(1.6rem, 4.2vw, 2.9rem); line-height: 1.15; letter-spacing: -0.015em; max-width: none; margin-top: -0.6rem; }
+.open .note ins { font-style: italic; }
 .cited { display: grid; grid-template-columns: minmax(0, 34rem) minmax(0, 1fr); gap: 1.5rem 3.5rem; align-items: start; }
 .cited .story { display: grid; gap: 1.1rem; }
 .margin { border-left: 2px solid var(--trace); padding-left: 1rem; display: grid; gap: 0.7rem; font: 400 0.8rem/1.55 var(--file); color: var(--ink-soft); min-width: 0; }
@@ -186,7 +187,8 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
 
 <main>
 <div class="wrap open">
-  <h1>The PokéCenter is <del>north</del> <ins>south</ins> of the gym.</h1>
+  <h1>Agents that dream.</h1>
+  <p class="note">The PokéCenter is <del>north</del> <ins>south</ins> of the gym.</p>
   <div class="cited">
     <div class="story">
       <p>An agent kept the first version in its notes. In two sessions it walked north of the gym and found nothing. In a third it found the PokéCenter to the south. The note still said north.</p>
