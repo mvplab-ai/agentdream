@@ -138,10 +138,12 @@ def _slug(heading: str) -> str:
     return s.replace(" ", "-")
 
 
-def test_no_pypi_claims():
+def test_install_docs_point_at_pypi():
+    """agentdream is on PyPI: the quickstart installs from there and no doc says otherwise."""
+    assert re.search(r"^pip install agentdream(\s|$)", (ROOT / "README.md").read_text(encoding="utf-8"), re.M)
     for doc in DOCS:
         for line in doc.read_text(encoding="utf-8").splitlines():
-            assert not re.search(r"pip install agentdream(\s|$)", line), f"{doc.name}: claims PyPI: {line}"
+            assert not re.search(r"not on PyPI yet", line, re.I), f"{doc.name}: stale PyPI note: {line}"
 
 
 # ------------------------------------------------------------------ mermaid lint

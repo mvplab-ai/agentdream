@@ -10,7 +10,7 @@ enforcement: [ARCHITECTURE.md](ARCHITECTURE.md).
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/pip install -e ".[stancelog]"   # optional: run the stancelog adapter tests too
+.venv/bin/pip install "git+https://github.com/systemagents-ai/stancelog"   # optional: run the stancelog adapter tests too
 .venv/bin/python -m pytest -q
 .venv/bin/python -m pytest -q -m edge     # only tests/edge
 .venv/bin/python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # refresh this table too
@@ -122,7 +122,6 @@ failure modes that need a broken on-disk database.
 * Windows is not in CI (`msvcrt` locking is used there; permission tests skip as root / on
   Windows).
 * Anthropic and Ollama live suites need a key or a running server; they are not run in CI.
-* Not on PyPI yet; install from git.
 
 ## Edge-case results
 

@@ -1,6 +1,7 @@
 # agentdream
 
 [![CI](https://github.com/mvplab-ai/agentdream/actions/workflows/ci.yml/badge.svg)](https://github.com/mvplab-ai/agentdream/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/agentdream.svg)](https://pypi.org/project/agentdream/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10 | 3.11 | 3.12 | 3.13](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![GitHub stars](https://img.shields.io/github/stars/mvplab-ai/agentdream?style=flat)](https://github.com/mvplab-ai/agentdream/stargazers)
@@ -29,8 +30,8 @@ your Claude Code login.
 ## 60-second quickstart
 
 ```bash
-git clone https://github.com/mvplab-ai/agentdream && cd agentdream
-pip install .                        # Python >= 3.10; not on PyPI yet
+pip install agentdream               # Python >= 3.10, no dependencies
+git clone https://github.com/mvplab-ai/agentdream && cd agentdream     # only for the bundled example below
 
 agentdream dream --memory examples/memory --sessions examples/sessions     # dry run: nothing is changed
 agentdream show <job-id>                 # the report: what changed, why, with transcript citations

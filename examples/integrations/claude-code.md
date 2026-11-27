@@ -3,7 +3,7 @@
 The full guide is [docs/CLAUDE_CODE.md](../../docs/CLAUDE_CODE.md). The short version:
 
 ```bash
-pip install "git+https://github.com/mvplab-ai/agentdream"
+pip install agentdream
 
 # MCP server: Claude can run dreams, show reports and (when you ask) accept them
 claude mcp add agentdream -- agentdream serve-mcp
