@@ -217,3 +217,13 @@ def test_mermaid_lint_catches_mistakes():
     assert lint_mermaid("sequenceDiagram\n  participant A\n  A->>A: a; b") != []
     assert lint_mermaid("pie\n  a: 1") != []
     assert lint_mermaid('flowchart LR\n  a["fine"] -->|"label"| b[("db")]') == []
+
+
+def test_site_index_is_built_from_page_source():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_site", ROOT / "scripts" / "build_site.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert (ROOT / "site" / "index.html").read_text(encoding="utf-8") == mod.build(), \
+        "site/index.html is stale: run python scripts/build_site.py"

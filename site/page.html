@@ -1,0 +1,486 @@
+<!--head-->
+<title>agentdream</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Sleep-time memory consolidation for AI agents. Merges duplicate notes, replaces stale values and corrects notes that session transcripts contradict, with citations. Local-first, reviewable, zero dependencies.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Spline+Sans+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sleep-lab chart. Recorder paper with a faint grid, one left-aligned column of 1040px.
+   Two inks only: the blue of the pen trace (what the dream writes) and red pencil (what it strikes).
+   The page opens on a note being proof-corrected; the pipeline is drawn as a hypnogram. */
+:root {
+  --paper: #f2f4f1;      /* recorder paper, cool grey-green */
+  --grid: #dfe5e2;       /* chart grid */
+  --sheet: #fbfcfa;      /* a file laid on the paper */
+  --ink: #15203a;        /* navy text */
+  --ink-soft: #55607a;   /* secondary text */
+  --rule: #c6cfd0;       /* hairlines */
+  --trace: #1d4fd7;      /* pen-recorder blue: insertions, links, the trace */
+  --trace-ink: #ffffff;  /* text on the trace colour */
+  --pencil: #c0362c;     /* red pencil: deletions, refuting evidence */
+  --prose: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --file: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1626; --grid: #18223a; --sheet: #151e33; --ink: #e4e9f3; --ink-soft: #9aa6c0; --rule: #2b3854;
+    --trace: #86a9ff; --trace-ink: #0f1626; --pencil: #ff8f80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1626; --grid: #18223a; --sheet: #151e33; --ink: #e4e9f3; --ink-soft: #9aa6c0; --rule: #2b3854;
+  --trace: #86a9ff; --trace-ink: #0f1626; --pencil: #ff8f80; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper)
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 100%;
+  background-color: var(--paper);
+  color: var(--ink); font: 400 1.19rem/1.62 var(--prose);
+}
+.wrap { max-width: 1040px; margin-inline: auto;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+a { color: var(--trace); text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--trace); outline-offset: 3px; }
+h1, h2, h3 { font-family: var(--prose); font-weight: 500; margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-height: 1.1; letter-spacing: -0.012em; }
+h3 { font-size: 1.32rem; line-height: 1.25; }
+p { margin: 0; max-width: 62ch; }
+code, pre, .f { font-family: var(--file); font-size: 0.8em; }
+.soft { color: var(--ink-soft); }
+del { color: var(--pencil); text-decoration-color: var(--pencil); text-decoration-thickness: 0.07em; }
+ins { color: var(--trace); text-decoration: none; }
+
+.mast { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.4rem 1.6rem; padding-block: 1.3rem; }
+.mast .name { font: 500 1rem var(--file); color: var(--ink); text-decoration: none; }
+.mast nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.5rem; font: 400 0.84rem var(--file); }
+
+/* the opening correction */
+.open { padding-block: clamp(1.5rem, 5vw, 4rem) 3.5rem; display: grid; gap: 2.2rem; }
+.open h1 { font-size: clamp(2.7rem, 8.6vw, 6.6rem); line-height: 1.0; letter-spacing: -0.028em; max-width: 13ch; }
+.open h1 ins { font-style: italic; }
+.cited { display: grid; grid-template-columns: minmax(0, 34rem) minmax(0, 1fr); gap: 1.5rem 3.5rem; align-items: start; }
+.cited .story { display: grid; gap: 1.1rem; }
+.margin { border-left: 2px solid var(--trace); padding-left: 1rem; display: grid; gap: 0.7rem; font: 400 0.8rem/1.55 var(--file); color: var(--ink-soft); min-width: 0; }
+.margin q { color: var(--ink); quotes: "\201c" "\201d"; }
+.margin .no { color: var(--pencil); }
+.margin .yes { color: var(--trace); }
+.cmd { display: flex; align-items: stretch; width: fit-content; max-width: 100%; border: 1px solid var(--ink); background: var(--sheet); }
+.cmd code { padding: 0.7rem 1rem; font-size: 0.95rem; white-space: nowrap; overflow-x: auto; min-width: 0; }
+.cmd button { border: 0; border-left: 1px solid var(--ink); background: var(--ink); color: var(--paper); font: 500 0.84rem var(--file); padding-inline: 1rem; cursor: pointer; }
+
+section { padding-block: 3.6rem; }
+section > .wrap { display: grid; gap: 2rem; }
+.lead { display: grid; gap: 0.8rem; }
+
+/* hypnogram */
+.chart { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); }
+.chart svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.chart text { font-family: var(--file); font-size: 12.5px; fill: var(--ink-soft); }
+.chart .lvl { fill: var(--ink); }
+.chart .ph { fill: var(--ink); font-weight: 500; }
+.chart .col { stroke: var(--rule); stroke-width: 1; fill: none; }
+.chart .row { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 5; fill: none; }
+.chart .run { stroke: var(--trace); stroke-width: 3.5; fill: none; stroke-linejoin: miter; }
+.chart .wake { stroke: var(--pencil); stroke-width: 2.5; fill: none; stroke-dasharray: 7 6; }
+.chart .dot { fill: var(--trace); }
+.chart .you { fill: var(--pencil); }
+.stages { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.3rem 2.4rem; font-size: 1.04rem; }
+.stages li { counter-increment: s; color: var(--ink-soft); }
+.stages b { font: 500 0.86rem var(--file); color: var(--ink); display: block; }
+.stages b::before { content: counter(s) "  "; color: var(--trace); white-space: pre; }
+
+/* the proof sheet */
+.proof { background: var(--sheet); border: 1px solid var(--ink); min-width: 0; }
+.proof header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem 1rem; padding: 0.7rem 1rem; border-bottom: 1px solid var(--ink); font: 400 0.82rem var(--file); }
+.proof header span { color: var(--ink-soft); }
+.sheet2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.file { margin: 0; padding: 0.8rem 0; list-style: none; font: 400 0.82rem/1.6 var(--file); border-right: 1px solid var(--rule); }
+.file li { padding: 0.12rem 1rem 0.12rem 2.1rem; position: relative; overflow-wrap: anywhere; }
+.file li::before { position: absolute; left: 0.9rem; content: " "; }
+.file li.head { color: var(--ink-soft); padding-top: 0.75rem; }
+.file li.del { color: var(--pencil); text-decoration: line-through; text-decoration-thickness: 1px; }
+.file li.del::before { content: "\2212"; }
+.file li.add { color: var(--trace); }
+.file li.add::before { content: "+"; }
+.ops { margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ops > li { border-bottom: 1px solid var(--rule); }
+.ops label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.1rem 0.7rem; padding: 0.7rem 1rem 0.3rem; cursor: pointer; }
+.ops input { width: 1rem; height: 1rem; margin-top: 0.45rem; accent-color: var(--trace); }
+.ops .what { font-size: 1.04rem; line-height: 1.35; }
+.ops .id { grid-column: 2; font: 400 0.74rem var(--file); color: var(--ink-soft); }
+.ops details { padding: 0 1rem 0.75rem 2.7rem; font-size: 0.95rem; color: var(--ink-soft); }
+.ops summary { cursor: pointer; color: var(--trace); width: fit-content; font: 400 0.76rem var(--file); }
+.ops details p { margin-top: 0.4rem; line-height: 1.45; }
+.ops details ul { margin: 0.5rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.4rem; font: 400 0.74rem/1.5 var(--file); }
+.ops details ul li { overflow-wrap: anywhere; }
+.ops .cite { color: var(--ink); }
+.ops .refutes { color: var(--pencil); }
+.ops .supports { color: var(--trace); }
+.decide { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; padding: 0.8rem 1rem; border-top: 1px solid var(--ink); }
+.decide button { font: 500 0.84rem var(--file); padding: 0.6rem 1rem; cursor: pointer; border: 1px solid var(--trace); }
+.decide .go { background: var(--trace); color: var(--trace-ink); }
+.decide .undo { background: transparent; color: var(--pencil); border-color: var(--pencil); }
+.decide button:disabled { opacity: 0.45; cursor: not-allowed; }
+.decide output { font-size: 1rem; color: var(--ink-soft); flex: 1; min-width: 12rem; }
+
+/* benchmark: four recordings on one scale */
+.scale { display: grid; gap: 0.2rem; }
+.scale h3 { margin-bottom: 0.2rem; }
+.rec { display: grid; grid-template-columns: minmax(9rem, 16rem) minmax(0, 1fr) 4.2rem; gap: 0.2rem 1rem; align-items: center; font-size: 1.04rem; padding-block: 0.42rem; border-top: 1px solid var(--rule); }
+.rec .track { height: 14px; background: repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 12.5%); border-right: 1px solid var(--rule); }
+.rec .fill { display: block; height: 100%; background: var(--trace); }
+.rec.base .fill { background: var(--ink-soft); }
+.rec .n { font: 400 0.82rem var(--file); text-align: right; font-variant-numeric: tabular-nums; }
+.axis { display: grid; grid-template-columns: minmax(9rem, 16rem) minmax(0, 1fr) 4.2rem; gap: 0 1rem; font: 400 0.72rem var(--file); color: var(--ink-soft); }
+.axis div { display: flex; justify-content: space-between; grid-column: 2; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 1.04rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 0.55rem 1.2rem 0.55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 0.78rem var(--file); white-space: nowrap; color: var(--ink-soft); }
+td.num, th.num { text-align: right; }
+.caveats { border-left: 2px solid var(--pencil); padding-left: 1.1rem; display: grid; gap: 0.5rem; }
+.caveats ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; color: var(--ink-soft); }
+
+.ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 2rem 2.6rem; }
+.way { display: grid; gap: 0.6rem; align-content: start; min-width: 0; }
+pre { margin: 0; padding: 0.8rem 1rem; background: var(--sheet); border: 1px solid var(--rule); overflow-x: auto; font-size: 0.78rem; line-height: 1.6; }
+.wont { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
+.wont li { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: 0.3rem 2.5rem; padding-block: 1rem; border-top: 1px solid var(--rule); color: var(--ink-soft); }
+.wont del { font-size: 1.32rem; line-height: 1.25; }
+
+footer { padding-block: 2rem 3rem; font: 400 0.8rem/1.6 var(--file); color: var(--ink-soft); border-top: 1px solid var(--rule); }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem; }
+footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
+
+@media (max-width: 820px) {
+  body { font-size: 1.1rem; }
+  .cited, .sheet2 { grid-template-columns: minmax(0, 1fr); }
+  .file { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .rec, .axis { grid-template-columns: minmax(0, 1fr) 4.2rem; }
+  .rec .label { grid-column: 1 / -1; }
+  .axis div { grid-column: 1; }
+  .wont li { grid-template-columns: minmax(0, 1fr); }
+  section { padding-block: 2.6rem; }
+}
+</style>
+<!--/head-->
+
+<div class="wrap mast">
+  <a class="name" href="https://github.com/mvplab-ai/agentdream">agentdream</a>
+  <nav aria-label="Project links">
+    <a href="https://github.com/mvplab-ai/agentdream">github</a>
+    <a href="https://pypi.org/project/agentdream/">pypi</a>
+    <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/CLAUDE_CODE.md">claude code guide</a>
+    <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md">benchmark</a>
+  </nav>
+</div>
+
+<main>
+<div class="wrap open">
+  <h1>The PokéCenter is <del>north</del> <ins>south</ins> of the gym.</h1>
+  <div class="cited">
+    <div class="story">
+      <p>An agent kept the first version in its notes. In two sessions it walked north of the gym and found nothing. In a third it found the PokéCenter to the south. The note still said north.</p>
+      <p>agentdream reads an agent's notes and its recent session logs while the agent is idle, and stages a corrected copy: duplicates merged, stale values replaced, wrong notes fixed with the lines that prove it. You review the changes before anything is written.</p>
+      <div class="cmd">
+        <code id="install-cmd">pip install agentdream</code>
+        <button type="button" id="copy-install" data-copy="install-cmd">Copy</button>
+      </div>
+      <p class="soft">Runs on your machine, with no dependencies and no model required. MIT licensed.</p>
+    </div>
+    <div class="margin" aria-label="The evidence for the correction above">
+      <span>correct-2ec6281c, confidence 0.80</span>
+      <span><span class="no">refutes</span> session-01.jsonl:3<br><q>Walked north of the gym for 20 steps. No PokéCenter here, only tall grass.</q></span>
+      <span><span class="no">refutes</span> session-02.jsonl:2<br><q>Walked north of the gym again. No PokéCenter here, this is a dead end.</q></span>
+      <span><span class="yes">supports</span> session-03.jsonl:2<br><q>It is just south of the gym, next to the Poké Mart.</q></span>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="lead">
+      <h2>One dream, charted</h2>
+      <p class="soft">A sleep lab charts a night as a line that steps between stages. This is the same chart for a dream: each step shows where that phase is working. The line touches your files once, to read them, and does not come back until you accept.</p>
+    </div>
+    <div class="chart">
+      <svg viewBox="-44 0 984 330" role="img" aria-label="Step chart of the seven dream phases. Load reads your files. Redact and limits work on a private copy. Consolidate, verify and insights run in the engine. Write goes to a staging folder. A dashed line returns to your files only at accept.">
+        <path class="row" d="M196,70 H924 M196,140 H924 M196,210 H924 M196,280 H924"></path>
+        <path class="col" d="M196,40 V300 M287,40 V300 M378,40 V300 M469,40 V300 M560,40 V300 M651,40 V300 M742,40 V300 M833,40 V300 M924,40 V300"></path>
+        <text class="lvl" x="182" y="74" text-anchor="end">your files, read-only</text>
+        <text class="lvl" x="182" y="144" text-anchor="end">a private, redacted copy</text>
+        <text class="lvl" x="182" y="214" text-anchor="end">the engine, rules or model</text>
+        <text class="lvl" x="182" y="284" text-anchor="end">a staging folder</text>
+        <text class="ph" x="241" y="28" text-anchor="middle">load</text>
+        <text class="ph" x="332" y="28" text-anchor="middle">redact</text>
+        <text class="ph" x="423" y="28" text-anchor="middle">limits</text>
+        <text class="ph" x="514" y="28" text-anchor="middle">consolidate</text>
+        <text class="ph" x="605" y="28" text-anchor="middle">verify</text>
+        <text class="ph" x="696" y="28" text-anchor="middle">insights</text>
+        <text class="ph" x="787" y="28" text-anchor="middle">write</text>
+        <text x="878" y="28" text-anchor="middle">accept</text>
+        <path class="run" d="M196,70 H287 V140 H469 V210 H742 V280 H833"></path>
+        <circle class="dot" cx="196" cy="70" r="5"></circle>
+        <circle class="dot" cx="833" cy="280" r="5"></circle>
+        <path class="wake" d="M833,280 V70 H924"></path>
+        <circle class="you" cx="924" cy="70" r="5"></circle>
+        <text x="878" y="322" text-anchor="middle">you, awake</text>
+        <text x="514" y="322" text-anchor="middle">the dream</text>
+      </svg>
+    </div>
+    <ol class="stages">
+      <li><b>load</b>Reads the memory store (markdown, JSON, SQLite) and the transcripts, keeping a file and line reference on every message.</li>
+      <li><b>redact</b>Scrubs API keys, tokens, passwords and card numbers before anything is analysed or sent to a model.</li>
+      <li><b>limits</b>Trims oversized inputs with a notice, or stops if you asked it to fail instead.</li>
+      <li><b>consolidate</b>Merges duplicate notes, keeps the newest of two dated values, resolves reversed preferences.</li>
+      <li><b>verify</b>Compares each note with what the transcripts show and corrects the ones the evidence contradicts.</li>
+      <li><b>insights</b>Records what recurs across sessions: repeated preferences, repeated mistakes, settled workflows.</li>
+      <li><b>write</b>Writes the new store, a report and a diff into the staging folder.</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lead">
+      <h2>Review it like a proof</h2>
+      <p class="soft">This is the bundled example as a dream stages it. Each change is an operation with its own id, so you can accept some and leave others. Untick one and watch the file.</p>
+    </div>
+    <div class="proof">
+      <header><strong>examples/memory/MEMORY.md</strong><span id="mode">dry run, nothing applied</span></header>
+      <div class="sheet2">
+        <ul class="file" id="file" aria-live="polite"></ul>
+        <ul class="ops" id="ops"></ul>
+      </div>
+      <div class="decide">
+        <button type="button" class="go" id="apply">Accept 4 operations</button>
+        <button type="button" class="undo" id="restore" hidden>Restore the backup</button>
+        <output id="status" for="apply">All four selected.</output>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lead">
+      <h2>Does the memory get better?</h2>
+      <p class="soft">The built-in benchmark writes a store of 130 notes and 50 sessions in which every defect is known: duplicates, stale values, notes the transcripts refute, reversed preferences, paraphrases, and 30 notes that must not change. It holds 80 facts and is scored by code, before and after.</p>
+    </div>
+
+    <div class="scale">
+      <h3>Facts an agent would read correctly</h3>
+      <p class="soft">The store states exactly one value for the fact, and it is the true one.</p>
+      <div class="rec base"><span class="label">Before the dream</span><span class="track"><span class="fill" style="width:62.5%"></span></span><span class="n">50 / 80</span></div>
+      <div class="rec"><span class="label">Rules, safe auto-update only</span><span class="track"><span class="fill" style="width:75%"></span></span><span class="n">60 / 80</span></div>
+      <div class="rec"><span class="label">Rules, everything accepted</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">80 / 80</span></div>
+      <div class="rec"><span class="label">Model, everything accepted</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">80 / 80</span></div>
+      <div class="axis"><div><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span></div></div>
+    </div>
+
+    <div class="scale">
+      <h3>The same, and stated in a single note</h3>
+      <p class="soft">Duplicates count against this one. The gap between rules and model is paraphrased duplicates, which the rules do not find.</p>
+      <div class="rec base"><span class="label">Before the dream</span><span class="track"><span class="fill" style="width:25%"></span></span><span class="n">20 / 80</span></div>
+      <div class="rec"><span class="label">Rules, safe auto-update only</span><span class="track"><span class="fill" style="width:62.5%"></span></span><span class="n">50 / 80</span></div>
+      <div class="rec"><span class="label">Rules, everything accepted</span><span class="track"><span class="fill" style="width:87.5%"></span></span><span class="n">70 / 80</span></div>
+      <div class="rec"><span class="label">Model, everything accepted</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">80 / 80</span></div>
+      <div class="axis"><div><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span></div></div>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Engine</th><th class="num">Notes that must not change, intact</th><th class="num">Paraphrases merged</th><th class="num">Time</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Rules, the default</td><td class="num">30 / 30</td><td class="num">0 / 10</td><td class="num">0.12 s</td><td>None, offline</td></tr>
+          <tr><td>Model, through a Claude Code login</td><td class="num">30 / 30</td><td class="num">10 / 10</td><td class="num">143 s</td><td>Three model calls</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="caveats">
+      <p>What these numbers do not show:</p>
+      <ul>
+        <li>They score the memory store. Whether an agent then finishes real tasks more often has not been measured.</li>
+        <li>The notes are template-generated plain English, which suits rule-based matching. Expect the rules to find less in notes written the way people write.</li>
+        <li>The model result is one run of one model, and model output varies between runs.</li>
+      </ul>
+      <p>Run it yourself with <code>agentdream benchmark</code>. The method and per-category results are in the <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md">benchmark write-up</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lead">
+      <h2>From Claude Code</h2>
+      <p class="soft">Three ways in. Each one starts as a dry run.</p>
+    </div>
+    <div class="ways">
+      <div class="way">
+        <h3>Ask for a dream</h3>
+        <p class="soft">Install the skill, then type <code>/dream</code>. Claude runs a dry-run dream, walks you through the report and applies only what you approve.</p>
+        <pre><code>agentdream install-claude-skill</code></pre>
+      </div>
+      <div class="way">
+        <h3>Let it run after sessions</h3>
+        <p class="soft">A background dream after every third session. With <code>--safe</code>, merges and stale-value replacements are applied with a backup. Corrections wait for you.</p>
+        <pre><code>agentdream install-claude-hook --every 3 --safe</code></pre>
+      </div>
+      <div class="way">
+        <h3>Give Claude the tools</h3>
+        <p class="soft">An MCP server with <code>dream</code>, <code>show_report</code> and <code>accept</code>. The same server works in Cursor.</p>
+        <pre><code>claude mcp add agentdream -- agentdream serve-mcp</code></pre>
+      </div>
+    </div>
+    <div class="way">
+      <h3>Or by hand, on any agent's memory</h3>
+      <pre><code>agentdream dream --memory ./memory --sessions "./logs/*.jsonl"   # dry run
+agentdream show &lt;job-id&gt;                                          # what changed and why
+agentdream accept &lt;job-id&gt; --only correct-2ec6281c                # apply some of it
+agentdream restore &lt;job-id&gt;                                       # undo an accept</code></pre>
+      <p class="soft">The default engine is rule-based and offline. <code>--backend</code> switches to Anthropic, any OpenAI-compatible server, Ollama, LM Studio, vLLM or your Claude Code login.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="lead">
+      <h2>Struck from the design</h2>
+    </div>
+    <ul class="wont">
+      <li><del>Changes your memory while you are away</del><span>A dream never writes to the store it read. Nothing is applied until you accept, or until you opt in to automatic updates.</span></li>
+      <li><del>Leaves no way back</del><span>Every accept backs up the store first and refuses to run if the store changed since the dream. One command restores it.</span></li>
+      <li><del>Sends your secrets to a model</del><span>Keys, tokens and passwords are redacted before analysis, again over every prompt, and again over every quote in the report.</span></li>
+      <li><del>Takes a model's word for it</del><span>A proposal that names a note or a transcript line that does not exist is dropped. A correction without verifiable evidence is downgraded to a flag.</span></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>MIT licensed. Independent open source, not affiliated with Anthropic.</span>
+    <nav aria-label="More">
+      <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/ARCHITECTURE.md">architecture</a>
+      <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/CONFIG.md">configuration</a>
+      <a href="https://github.com/mvplab-ai/agentdream/issues">issues</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // The four operations the bundled example proposes for MEMORY.md, as agentdream reports them.
+  var OPS = [
+    { id: "correct-2ec6281c", what: "Correct a note the transcripts contradict",
+      why: "Transcripts show 'south', not 'north' (3 supporting, 4 refuting observations). Confidence 0.80.",
+      evidence: [
+        ["refutes", "session-01.jsonl:3", "Walked north of the gym for 20 steps. No PokéCenter here, only tall grass."],
+        ["refutes", "session-02.jsonl:2", "Walked north of the gym again. No PokéCenter here, this is a dead end."],
+        ["supports", "session-03.jsonl:2", "It is just south of the gym, next to the Poké Mart."]] },
+    { id: "contradiction-c4b66adf", what: "Flip a preference the user reversed",
+      why: "A later session reversed the note's stance. The newer one becomes current and the old one is kept as history. Confidence 0.70.",
+      evidence: [["supports", "session-04-claude-code.jsonl:2", "Actually, let's use Poetry for dependency management from now on."]] },
+    { id: "merge-a91fbf3a", what: "Merge two notes that say the same thing",
+      why: "Notes say the same thing (normalised text and token overlap). Confidence 0.85.", evidence: [] },
+    { id: "replace-ef9c48dc", what: "Drop a stale value",
+      why: "notes/project.md says port 9090, dated 2026-02-10. The most recent value wins. Confidence 0.75.", evidence: [] }
+  ];
+  var LINES = [
+    { head: "## Navigation (Viridian City)" },
+    { op: "correct-2ec6281c", old: "- The PokéCenter in Viridian City is north of the gym. (2026-01-03)",
+      now: "- The PokéCenter in Viridian City is south of the gym. (2026-03-03)" },
+    { text: "- The Poké Mart in Viridian City sells Potions and Poké Balls." },
+    { head: "## Tooling" },
+    { op: "contradiction-c4b66adf", old: "- Don't use Poetry for dependency management — it was too slow on CI. (2026-01-05)",
+      now: "- Use Poetry for dependency management. (History: earlier said \"Don't use Poetry…\"; reversed later, session-04-claude-code.jsonl:2.)" },
+    { op: "merge-a91fbf3a", old: "- Run the test suite with `pytest -q` before committing.", now: null },
+    { text: "- Run the tests with `pytest -q` before every commit." },
+    { head: "## Project facts" },
+    { op: "replace-ef9c48dc", old: "- The API server listens on port 8080. (2025-12-01)", now: null },
+    { text: "- Production deploys go through the `release` branch." }
+  ];
+  var chosen = {}, applied = false;
+  OPS.forEach(function (o) { chosen[o.id] = true; });
+  var file = document.getElementById("file"), ops = document.getElementById("ops");
+  var apply = document.getElementById("apply"), restore = document.getElementById("restore");
+  var status = document.getElementById("status");
+
+  function li(cls, text) { var e = document.createElement("li"); if (cls) e.className = cls; e.textContent = text; return e; }
+  function count() { return OPS.filter(function (o) { return chosen[o.id]; }).length; }
+
+  function drawFile() {
+    file.textContent = "";
+    LINES.forEach(function (l) {
+      if (l.head) return file.appendChild(li("head", l.head));
+      if (l.text) return file.appendChild(li("", l.text));
+      if (!chosen[l.op]) return file.appendChild(li("", l.old));
+      if (applied) { if (l.now) file.appendChild(li("", l.now)); return; }
+      file.appendChild(li("del", l.old));
+      if (l.now) file.appendChild(li("add", l.now));
+    });
+  }
+  function drawOps() {
+    ops.textContent = "";
+    OPS.forEach(function (o) {
+      var item = document.createElement("li"), label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox"; box.id = "op-" + o.id; box.checked = chosen[o.id]; box.disabled = applied;
+      box.addEventListener("change", function () { chosen[o.id] = box.checked; draw(); });
+      var what = document.createElement("span"); what.className = "what"; what.textContent = o.what;
+      var id = document.createElement("span"); id.className = "id"; id.textContent = o.id;
+      label.appendChild(box); label.appendChild(what); label.appendChild(id); item.appendChild(label);
+      var d = document.createElement("details"), s = document.createElement("summary");
+      s.textContent = o.evidence.length ? "Why, and the evidence" : "Why";
+      var p = document.createElement("p"); p.textContent = o.why;
+      d.appendChild(s); d.appendChild(p);
+      if (o.evidence.length) {
+        var ul = document.createElement("ul");
+        o.evidence.forEach(function (e) {
+          var row = document.createElement("li"), kind = document.createElement("span"), cite = document.createElement("span");
+          kind.className = e[0]; kind.textContent = e[0] + " ";
+          cite.className = "cite"; cite.textContent = e[1] + " ";
+          row.appendChild(kind); row.appendChild(cite); row.appendChild(document.createTextNode("“" + e[2] + "”"));
+          ul.appendChild(row);
+        });
+        d.appendChild(ul);
+      }
+      item.appendChild(d); ops.appendChild(item);
+    });
+  }
+  function draw() {
+    var n = count();
+    drawFile();
+    apply.hidden = applied; restore.hidden = !applied;
+    apply.disabled = n === 0;
+    apply.textContent = n === 0 ? "Nothing selected" : "Accept " + n + " operation" + (n === 1 ? "" : "s");
+    document.getElementById("mode").textContent = applied ? "accepted, backup kept" : "dry run, nothing applied";
+    if (!applied) status.textContent = n === OPS.length ? "All four selected."
+      : n === 0 ? "Nothing would change. That is a discard." : (OPS.length - n) + " left out. The file shows the result.";
+  }
+  apply.addEventListener("click", function () {
+    var n = count(); applied = true; drawOps(); draw();
+    status.textContent = "Accepted " + n + " operation" + (n === 1 ? "" : "s") + ". The original was backed up first.";
+    restore.focus();
+  });
+  restore.addEventListener("click", function () {
+    applied = false; drawOps(); draw();
+    status.textContent = "Backup restored. The dream is staged again.";
+    apply.focus();
+  });
+  drawOps(); draw();
+
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var el = document.getElementById(btn.getAttribute("data-copy")), text = el.textContent;
+      function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1600); }
+      function select() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, select); else select();
+    });
+  });
+})();
+</script>
