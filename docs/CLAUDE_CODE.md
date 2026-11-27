@@ -5,10 +5,10 @@ Two independent ways to use agentdream from Claude Code:
 1. **MCP server** — Claude can run, inspect and (when you ask) accept dreams.
 2. **Hook** — a dream runs automatically in the background after sessions end (opt-in, dry run by default).
 
-Install agentdream first (it is not on PyPI yet):
+Install agentdream first:
 
 ```bash
-pip install "git+https://github.com/mvplab-ai/agentdream"
+pip install agentdream
 agentdream --version
 ```
 

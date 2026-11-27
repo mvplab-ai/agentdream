@@ -22,7 +22,7 @@ Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports belong
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"                 # pytest, pytest-cov, hypothesis, ruff, mypy
-.venv/bin/pip install -e ".[stancelog]"           # optional: run the stancelog adapter tests too
+.venv/bin/pip install "git+https://github.com/systemagents-ai/stancelog"   # optional: run the stancelog adapter tests too
 .venv/bin/python -m pytest -q                      # ~25 s
 .venv/bin/python -m pytest -q -m edge              # only the edge-case suite (tests/edge)
 .venv/bin/python scripts/edge_case_table.py --write docs/EDGE_CASES.md   # refresh EDGE_CASES.md + the table in docs/TESTING.md

@@ -29,12 +29,9 @@ dependencies = []
 
 [project.optional-dependencies]
 # All built-in LLM backends use urllib / subprocess, so no SDK extra is needed.
-# The stancelog adapter is optional and imported lazily: pip install "agentdream[stancelog]".
-stancelog = ["stancelog @ git+https://github.com/systemagents-ai/stancelog"]
+# The stancelog adapter is optional and imported lazily. stancelog is not on PyPI, and PyPI rejects
+# direct-URL dependencies, so install it yourself: pip install "git+https://github.com/systemagents-ai/stancelog"
 dev = ["pytest>=7", "pytest-cov>=4", "coverage[toml]>=7", "ruff>=0.6", "mypy>=1.10", "hypothesis>=6.100"]
-
-[tool.hatch.metadata]
-allow-direct-references = true  # needed for the git URL in the stancelog extra
 
 [project.scripts]
 agentdream = "agentdream.cli:main"
