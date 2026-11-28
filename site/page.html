@@ -306,6 +306,43 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
       </table>
     </div>
 
+    <div class="scale">
+      <h3>Every task</h3>
+      <p class="soft">Runs passed out of 9: three models, three runs each.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Task given to Claude Code</th><th>What had drifted</th><th class="num">Drifted</th><th class="num">Rules</th><th class="num">Model</th></tr></thead>
+        <tbody>
+          <tr><td>Add an Address model</td><td>A preference the user reversed</td><td class="num">0</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Add a cancel function that records a message</td><td>A preference the user reversed</td><td class="num">0</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Print the staging database address</td><td>A host that was decommissioned</td><td class="num">0</td><td class="num">0</td><td class="num">9</td></tr>
+          <tr><td>Raise the request timeout</td><td>A note naming a file nothing reads</td><td class="num">5</td><td class="num">6</td><td class="num">9</td></tr>
+          <tr><td>Add a function, run the tests</td><td>A test command that no longer exists</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Add a test fixture</td><td>A directory that does not exist</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Write a health check</td><td>An old port beside the new one</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Add a coverage threshold</td><td>An old value beside the new one</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Add a discount function</td><td>Nothing: a control</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+          <tr><td>Add an item count function</td><td>Nothing: a control</td><td class="num">9</td><td class="num">9</td><td class="num">9</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="scale">
+      <h3>Effort</h3>
+      <p class="soft">Mean turns per task. A dream did not reduce them.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Mean turns per task</th><th class="num">Drifted</th><th class="num">Rules</th><th class="num">Model</th><th class="num">Cost of 90 runs</th></tr></thead>
+        <tbody>
+          <tr><td>claude-haiku-5-5</td><td class="num">8.2</td><td class="num">7.6</td><td class="num">7.9</td><td class="num">$0.45</td></tr>
+          <tr><td>claude-sonnet-5-5</td><td class="num">3.7</td><td class="num">3.5</td><td class="num">4.2</td><td class="num">$4.53</td></tr>
+          <tr><td>claude-opus-5-5</td><td class="num">5.9</td><td class="num">6.2</td><td class="num">6.3</td><td class="num">$10.97</td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <div class="caveats">
       <p>Every model followed a note that stated a preference or an outside fact, in every run, because nothing in the repository contradicts it. Notes about the code were checked against the code and cost no failures. Read the result with these in mind:</p>
       <ul>
@@ -345,6 +382,35 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
       <div class="axis"><div><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span></div></div>
     </div>
 
+    <div class="scale">
+      <h3>By kind of defect</h3>
+      <p class="soft">Facts left clean, out of 10 in each kind (20 controls).</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>What was wrong with the notes</th><th class="num">Before</th><th class="num">Rules, safe only</th><th class="num">Rules, all</th><th class="num">Model, all</th></tr></thead>
+        <tbody>
+          <tr><td>The same note twice, word for word</td><td class="num">0</td><td class="num">10</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr><td>The same note twice, slightly reworded</td><td class="num">0</td><td class="num">10</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr><td>Two dated values, the newer one true</td><td class="num">0</td><td class="num">10</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr><td>A note the transcripts refute</td><td class="num">0</td><td class="num">0</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr><td>A preference the user reversed</td><td class="num">0</td><td class="num">0</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr><td>One fact in two unrelated wordings</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">10</td></tr>
+          <tr><td>Nothing: correct notes (controls)</td><td class="num">20</td><td class="num">20</td><td class="num">20</td><td class="num">20</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="scale">
+      <h3>A model answering from the notes</h3>
+      <p class="soft">The same store, with a model in the agent's place: it gets the notes and one question per fact, and code checks its answers. Rule-based dream, two runs per store, identical counts both times.</p>
+      <div class="rec base"><span class="label">Before the dream</span><span class="track"><span class="fill" style="width:75%"></span></span><span class="n">60 / 80</span></div>
+      <div class="rec"><span class="label">Rules, safe auto-update only</span><span class="track"><span class="fill" style="width:75%"></span></span><span class="n">60 / 80</span></div>
+      <div class="rec"><span class="label">Rules, everything accepted</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">80 / 80</span></div>
+      <div class="axis"><div><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span></div></div>
+      <p class="soft">The model handled duplicates and dated values on its own. It answered all 20 questions about a refuted note or a reversed preference wrongly until the dream fixed them. The safe auto-update did not change its answers; it made the notes 13% smaller.</p>
+    </div>
+
     <div class="scroll">
       <table>
         <thead><tr><th>Engine</th><th class="num">Notes that must not change, intact</th><th class="num">Paraphrases merged</th><th class="num">Time</th><th>Cost</th></tr></thead>
@@ -358,11 +424,11 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
     <div class="caveats">
       <p>What these numbers do not show:</p>
       <ul>
-        <li>They score the memory store. Whether an agent then finishes real tasks more often has not been measured.</li>
+        <li>They score the memory store on generated notes. The Claude Code runs above are the measure of real tasks.</li>
         <li>The notes are template-generated plain English, which suits rule-based matching. Expect the rules to find less in notes written the way people write.</li>
-        <li>The model result is one run of one model, and model output varies between runs.</li>
+        <li>The model dream is one run of one model, and model output varies between runs.</li>
       </ul>
-      <p>Run it yourself with <code>agentdream benchmark</code>. The method and per-category results are in the <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md">benchmark write-up</a>.</p>
+      <p>Run it yourself with <code>agentdream benchmark</code>, and add <code>--ask claude-cli</code> for the model reader. The method and per-category results are in the <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md">benchmark write-up</a>.</p>
     </div>
   </div>
 </section>
