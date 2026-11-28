@@ -10,83 +10,115 @@ Two measurements, both scored by code and neither judged by a model:
 ## Claude Code on real tasks
 
 ```bash
-python evals/claude_code/run.py --model sonnet --repeats 3
+python evals/claude_code/run.py --models sonnet,haiku,opus --repeats 3
 ```
 
-The script generates a small Python project and a `CLAUDE.md` that has drifted in five ways, plus
-three earlier sessions, in Claude Code's own transcript format, in which the agent runs into each
+The script generates a small Python project and a `CLAUDE.md` that has drifted in eight ways, plus
+five earlier sessions, in Claude Code's own transcript format, in which the agent runs into each
 problem and finds the truth:
 
 | The drifted note | The truth, as the sessions show it |
 |---|---|
 | "Runtime settings live in `config/settings.json`" | That file is a leftover nothing reads; settings are in `orders/defaults.py` |
+| "Test fixtures live in `tests/data/`" | There is no such directory; they are in `tests/fixtures/` |
 | "Run the test suite with `make test`" (twice, in two wordings) | The Makefile was removed; it is `python -m unittest discover -s tests` |
 | "Don't use dataclasses for new models" | The user reversed this: use dataclasses from now on |
+| "Don't use the logging module" | The user reversed this too |
+| "The staging database host is `db-staging-1.internal`" | Decommissioned; it is `db-staging-3.internal`. The code does not contain it |
 | "The API server listens on port 8080" next to a newer note saying 9090 | 9090 |
+| "CI fails below 80% coverage" next to a newer note saying 90% | 90% |
+
+Two more notes are correct and stay that way, and two of the ten tasks depend only on those. They are
+controls: a dream that damaged good notes would fail them.
 
 agentdream dreams over that memory and those sessions and everything it proposes is accepted. Then
-Claude Code runs headless (`claude -p`) on four tasks in fresh copies of the project. The copies are
+Claude Code runs headless (`claude -p`) on ten tasks in fresh copies of the project. The copies are
 identical except for `CLAUDE.md`. Each run is checked by code: the function exists and returns the right
-value, the tests pass, the setting the program actually reads has changed.
+value, the tests pass, the setting the program actually reads has changed, the script names the right
+host.
 
-Result with `claude-sonnet-5-5`, three runs per task per memory file, 36 runs in all:
+### Results
 
-| Memory file | Tasks passed | Mean turns | Mean seconds | Mean cost per task |
-|---|---|---|---|---|
-| Before the dream | 6 / 12 | 4.7 | 7.6 | $0.06 |
-| After a rule-based dream (no model) | 9 / 12 | 3.3 | 5.3 | $0.05 |
-| After a model dream (`claude-cli`) | 12 / 12 | 5.6 | 8.4 | $0.06 |
+Three runs per task per memory file, 90 runs per model, 270 in all (Claude Code 2.1.332):
 
-| Task | Before | After, rules | After, model |
+| Tasks passed, out of 30 | Drifted notes | After a rule-based dream (no model) | After a model dream |
 |---|---|---|---|
-| Raise the request timeout to 45 seconds | 0/3 passed | 0/3 passed | 3/3 passed |
-| Add `total_with_tax` and run the tests | 3/3, 5.3 turns | 3/3, 5 turns | 3/3, 5 turns |
-| Add an `Address` model | 0/3 passed | 3/3 passed | 3/3 passed |
-| Add a health-check script on the API port | 3/3, 7.3 turns | 3/3, 2 turns | 3/3, 10 turns |
+| `claude-haiku-5-5` | 21 | 27 | 30 |
+| `claude-sonnet-5-5` | 18 | 24 | 30 |
+| `claude-opus-5-5` | 20 | 27 | 30 |
+| **All three, out of 90** | **59** | **78** | **90** |
 
-What happened in each:
+Per task, runs passed out of 9 (three models, three runs each):
 
-* **Timeout.** With the drifted note, which names `config/settings.json`, all three runs finished in
-  three turns and the program still used 30 seconds: the setting the code reads was never changed. The
-  rule-based dream does not fix this note (it cannot read "nothing reads that file" as a correction to
-  a path), so that arm fails identically. The model dream rewrote the note to name `orders/defaults.py`
-  and all three runs changed the right setting.
-* **Address model.** The drifted note says not to use dataclasses, and none of the three runs produced
-  one, against what the user had since asked for. Both dreams flip the note, and all six runs after a
-  dream produced a dataclass.
-* **Tests.** The dead `make test` note cost almost nothing: about a third of a turn on average. Every
-  run passed.
-* **Health check.** Every run passed in every arm, since the code states the port. The difference is
-  effort. With two conflicting port notes the runs took 6 to 9 turns. After the rule-based dream, with
-  one note, 2 turns each. After the model dream they took 9 to 11 turns, more than before. The likely
-  cause is an insight that dream added, telling the agent to verify noted paths, commands and ports
-  against the repo or the running service before relying on them.
+| Task | What had drifted | Drifted | Rules | Model |
+|---|---|---|---|---|
+| Add an `Address` model | a preference the user reversed | 0 | 9 | 9 |
+| Add a `cancel` function that records a message | a preference the user reversed | 0 | 9 | 9 |
+| Print the staging database DSN | a value that changed, not in the code | 0 | 0 | 9 |
+| Raise the request timeout | a note naming a file nothing reads | 5 | 6 | 9 |
+| Add `total_with_tax`, run the tests | a command that no longer exists | 9 | 9 | 9 |
+| Add a test fixture | a directory that does not exist | 9 | 9 | 9 |
+| Write a health check | an old port next to the new one | 9 | 9 | 9 |
+| Add a coverage threshold | an old value next to the new one | 9 | 9 | 9 |
+| Add a `discount` function | control: the notes are right | 9 | 9 | 9 |
+| Add an `item_count` function | control: the notes are right | 9 | 9 | 9 |
 
-Read it this way:
+Pass and fail were the same in all three runs of 89 of the 90 cells. The exception is Opus on the
+timeout task with the drifted notes, which passed twice and failed once.
 
-* **A dream changed outcomes, not only effort.** Half the runs failed with the drifted memory, quickly
-  and without an error from the harness. That is the cost of a wrong note.
-* **The free, offline dream recovered three of the six failures** and made the runs shorter and cheaper.
-  The remaining three need a model to read the transcripts.
-* **A model dream is not automatically more efficient.** It fixed everything, and one note it wrote made
-  the agent more cautious and slower. Review the insights a dream adds, not only its corrections.
+Turns and cost did not move in a consistent direction:
 
-Limits of this measurement:
+| Mean turns per task | Drifted | Rules | Model |
+|---|---|---|---|
+| `claude-haiku-5-5` | 8.2 | 7.6 | 7.9 |
+| `claude-sonnet-5-5` | 3.7 | 3.5 | 4.2 |
+| `claude-opus-5-5` | 5.9 | 6.2 | 6.3 |
 
-* **Four tasks, written to run into the drift.** This shows what a wrong note costs and that a dream
-  removes the cost. It does not estimate how often your notes are wrong, and so not how much a dream
-  would help on your project.
-* **Small numbers.** Three runs per cell. The pass / fail results were the same in all three runs of
-  every cell, which is why they are worth reporting; the turn counts vary by a turn or two.
-* **One model, one harness version.** `claude-sonnet-5-5` through Claude Code 2.1.332. A stronger model
-  may check a note before trusting it.
+### What the runs show
+
+* **Notes that state a preference or an outside fact were followed every time, by every model.** With
+  the drifted notes, all 27 runs of the three tasks that depend on a reversed preference or on the
+  decommissioned host failed. Nothing in the repository contradicts such a note, so no amount of care
+  catches it. This is where a dream changes the outcome: 0 of 27 before, 27 of 27 after a model dream.
+* **Notes about the code are a different story.** A wrong command, a missing directory, an old port
+  beside the new one: every model checked the repository and recovered, in every run. Those notes
+  cost a few turns at most and no failures.
+* **The wrong-file note split the models.** Sonnet changed nothing the program reads in all three
+  runs and stopped after three turns. Haiku and Opus looked further and mostly found the real setting
+  (3 of 3 and 2 of 3).
+* **The free, offline dream recovered 19 of the 31 failures,** 18 of them by flipping the two reversed
+  preferences.
+  It cannot read "that host was decommissioned" or "nothing reads that file" as a correction, so those
+  need a model dream.
+* **A dream did no harm.** Both controls passed in all 54 runs across the three memory files, and no
+  task that passed with the drifted notes failed after either dream.
+* **It did not make the agent faster or cheaper.** The gain is in tasks done correctly, not in turns.
+  The model dream also added two insights, one telling the agent to verify notes before relying on
+  them, and on Sonnet its runs were slightly longer.
+
+The rule-based dream also left the 80% and 90% coverage notes side by side. All nine runs with that
+file still picked 90%, so it cost nothing here, but it is a miss.
+
+### Limits
+
+* **Ten tasks, written to run into the drift.** This shows which kinds of wrong note cost a task and
+  that a dream removes the cost. It does not estimate how often your notes are wrong, and so not how
+  much a dream would help on your project.
+* **One small project, one author.** The project, the notes, the sessions and the checks were written
+  by the same hand as the tool. The sessions state each truth plainly; real transcripts are messier
+  and a dream will recover less from them.
+* **Three runs per cell.** Enough to see that results are stable, not enough for fine differences in
+  turn counts.
 * **Sandboxed runs.** User-level settings, plugins and MCP servers were switched off
   (`--setting-sources project --strict-mcp-config`) and shell access was limited to python, make and
-  read-only commands, so a few attempted commands were refused (9 with the drifted memory, 0 after the
-  rule-based dream, 4 after the model dream). That inflates turn counts a little where it happened.
+  read-only commands, so some attempted commands were refused: 12 across Sonnet's 90 runs, 38 across
+  Opus's and 98 across Haiku's, in all three memory files. That adds turns where it happened.
+* **Pass means the check passed.** The checks are narrow by design (does the model use a dataclass,
+  does the script name the right host). They do not grade code quality.
 
 The raw rows, the three memory files and the operations each dream proposed are in
-[`evals/claude_code/results.json`](../evals/claude_code/results.json). The whole run cost $1.94.
+[`evals/claude_code/results.json`](../evals/claude_code/results.json). The 270 runs cost $15.95:
+$0.45 on Haiku, $4.53 on Sonnet and $10.97 on Opus.
 
 ## The memory store itself
 

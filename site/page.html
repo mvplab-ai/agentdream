@@ -131,7 +131,7 @@ section > .wrap { display: grid; gap: 2rem; }
 .scale h3 { margin-bottom: 0.2rem; }
 .rec { display: grid; grid-template-columns: minmax(9rem, 16rem) minmax(0, 1fr) 4.2rem; gap: 0.2rem 1rem; align-items: center; font-size: 1.04rem; padding-block: 0.42rem; border-top: 1px solid var(--rule); }
 .rec .track { height: 14px; background: repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 12.5%); border-right: 1px solid var(--rule); }
-.rec .track.twelfths { background: repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 8.3333%); }
+.rec .track.ninths { background: repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 11.1111%); }
 .rec .fill { display: block; height: 100%; background: var(--trace); }
 .rec.base .fill { background: var(--ink-soft); }
 .rec .n { font: 400 0.82rem var(--file); text-align: right; font-variant-numeric: tabular-nums; }
@@ -270,38 +270,50 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.3rem; }
   <div class="wrap">
     <div class="lead">
       <h2>Does Claude Code do better work?</h2>
-      <p class="soft">Four coding tasks, run through Claude Code itself in copies of one project. The copies differ only in <code>CLAUDE.md</code>: notes that have drifted, the same notes after a rule-based dream, and after a model dream. Three runs each, 36 in all, every result checked by code.</p>
+      <p class="soft">Ten coding tasks, run through Claude Code itself in copies of one project. The copies differ only in <code>CLAUDE.md</code>: notes that have drifted, the same notes after a rule-based dream, and after a model dream. Three models, three runs each, 270 runs, every result checked by code.</p>
     </div>
 
     <div class="scale">
       <h3>Tasks completed correctly</h3>
-      <p class="soft">Out of 12 runs per memory file, with claude-sonnet-5-5.</p>
-      <div class="rec base"><span class="label">Drifted notes</span><span class="track twelfths"><span class="fill" style="width:50%"></span></span><span class="n">6 / 12</span></div>
-      <div class="rec"><span class="label">After a rule-based dream</span><span class="track twelfths"><span class="fill" style="width:75%"></span></span><span class="n">9 / 12</span></div>
-      <div class="rec"><span class="label">After a model dream</span><span class="track twelfths"><span class="fill" style="width:100%"></span></span><span class="n">12 / 12</span></div>
-      <div class="axis"><div><span>0</span><span>3</span><span>6</span><span>9</span><span>12</span></div></div>
+      <p class="soft">Out of 90 runs per memory file: Haiku, Sonnet and Opus, 30 each.</p>
+      <div class="rec base"><span class="label">Drifted notes</span><span class="track ninths"><span class="fill" style="width:65.56%"></span></span><span class="n">59 / 90</span></div>
+      <div class="rec"><span class="label">After a rule-based dream</span><span class="track ninths"><span class="fill" style="width:86.67%"></span></span><span class="n">78 / 90</span></div>
+      <div class="rec"><span class="label">After a model dream</span><span class="track ninths"><span class="fill" style="width:100%"></span></span><span class="n">90 / 90</span></div>
+      <div class="axis"><div><span>0</span><span>30</span><span>60</span><span>90</span></div></div>
     </div>
 
     <div class="scroll">
       <table>
-        <thead><tr><th>Task</th><th>What had drifted</th><th class="num">Drifted</th><th class="num">Rules</th><th class="num">Model</th></tr></thead>
+        <thead><tr><th>Passed, out of 30</th><th class="num">Drifted</th><th class="num">Rules</th><th class="num">Model</th></tr></thead>
         <tbody>
-          <tr><td>Raise the request timeout</td><td>A note names a config file nothing reads</td><td class="num">0 / 3</td><td class="num">0 / 3</td><td class="num">3 / 3</td></tr>
-          <tr><td>Add an Address model</td><td>A preference the user later reversed</td><td class="num">0 / 3</td><td class="num">3 / 3</td><td class="num">3 / 3</td></tr>
-          <tr><td>Add a function, run the tests</td><td>A test command that no longer exists</td><td class="num">3 / 3</td><td class="num">3 / 3</td><td class="num">3 / 3</td></tr>
-          <tr><td>Write a health check</td><td>An old port next to the new one</td><td class="num">3 / 3 in 7.3 turns</td><td class="num">3 / 3 in 2 turns</td><td class="num">3 / 3 in 10 turns</td></tr>
+          <tr><td>claude-haiku-5-5</td><td class="num">21</td><td class="num">27</td><td class="num">30</td></tr>
+          <tr><td>claude-sonnet-5-5</td><td class="num">18</td><td class="num">24</td><td class="num">30</td></tr>
+          <tr><td>claude-opus-5-5</td><td class="num">20</td><td class="num">27</td><td class="num">30</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>What had drifted in the notes</th><th class="num">Drifted</th><th class="num">Rules</th><th class="num">Model</th></tr></thead>
+        <tbody>
+          <tr><td>A preference the user later reversed (2 tasks)</td><td class="num">0 / 18</td><td class="num">18 / 18</td><td class="num">18 / 18</td></tr>
+          <tr><td>An outside fact that changed, not in the code</td><td class="num">0 / 9</td><td class="num">0 / 9</td><td class="num">9 / 9</td></tr>
+          <tr><td>A note naming a file nothing reads</td><td class="num">5 / 9</td><td class="num">6 / 9</td><td class="num">9 / 9</td></tr>
+          <tr><td>A dead command, a missing directory, an old value beside the new (4 tasks)</td><td class="num">36 / 36</td><td class="num">36 / 36</td><td class="num">36 / 36</td></tr>
+          <tr><td>Nothing: the notes are right (2 control tasks)</td><td class="num">18 / 18</td><td class="num">18 / 18</td><td class="num">18 / 18</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="caveats">
-      <p>With the note pointing at the wrong file, every run finished in three turns and changed nothing the program reads. That is what a wrong note costs. Read the rest with these in mind:</p>
+      <p>Every model followed a note that stated a preference or an outside fact, in every run, because nothing in the repository contradicts it. Notes about the code were checked against the code and cost no failures. Read the result with these in mind:</p>
       <ul>
-        <li>The four tasks were written to run into the drift. This shows the cost of a wrong note and that a dream removes it. It does not say how often your notes are wrong.</li>
-        <li>Three runs per cell, one model. Pass and fail were identical across all three runs of every cell.</li>
-        <li>The model dream made the health check slower than before. It added a note telling the agent to verify ports before trusting them.</li>
+        <li>The tasks were written to run into the drift. This shows which wrong notes cost a task and that a dream removes the cost. It does not say how often your notes are wrong.</li>
+        <li>One small project, written by the same hand as the tool. Real transcripts are messier.</li>
+        <li>A dream did not make the agent faster or cheaper. Turns and cost per task stayed about the same.</li>
       </ul>
-      <p>Reproduce it with <code>python evals/claude_code/run.py</code>. The 36 runs cost $1.94. Details are in the <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md#claude-code-on-real-tasks">write-up</a>.</p>
+      <p>Reproduce it with <code>python evals/claude_code/run.py</code>. The 270 runs cost $15.95. Details are in the <a href="https://github.com/mvplab-ai/agentdream/blob/main/docs/BENCHMARK.md#claude-code-on-real-tasks">write-up</a>.</p>
     </div>
   </div>
 </section>

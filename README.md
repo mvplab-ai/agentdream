@@ -162,20 +162,24 @@ machines. Operation ids are content hashes, so they are stable across re-runs of
 
 ## Does it help?
 
-**On Claude Code itself.** Four coding tasks, run headless through Claude Code (`claude-sonnet-5-5`)
-in copies of a project that differ only in `CLAUDE.md`: the drifted notes, the notes after a rule-based
-dream, and the notes after a model dream. Three runs each, checked by code:
+**On Claude Code itself.** Ten coding tasks, run headless through Claude Code in copies of a project
+that differ only in `CLAUDE.md`: notes that have drifted, the same notes after a rule-based dream, and
+after a model dream. Three models, three runs each, 270 runs, every result checked by code:
 
-| Memory file | Tasks passed | Mean turns | Mean cost per task |
+| Tasks passed, out of 30 | Drifted notes | After a rule-based dream (no model) | After a model dream |
 |---|---|---|---|
-| Before the dream | 6 / 12 | 4.7 | $0.06 |
-| After a rule-based dream (no model) | 9 / 12 | 3.3 | $0.05 |
-| After a model dream | 12 / 12 | 5.6 | $0.06 |
+| `claude-haiku-5-5` | 21 | 27 | 30 |
+| `claude-sonnet-5-5` | 18 | 24 | 30 |
+| `claude-opus-5-5` | 20 | 27 | 30 |
+| **All three, out of 90** | **59** | **78** | **90** |
 
-With a note pointing at the wrong file, every run changed nothing the program reads and finished
-anyway. The tasks were written to run into the drift, so this shows what a wrong note costs and that
-a dream removes it, not how often your notes are wrong. A model dream also made one task slower by
-adding a cautious insight. Reproduce it with `python evals/claude_code/run.py`.
+Every model followed a note that stated a reversed preference or a decommissioned host, in every run:
+0 of 27 passed before a dream, 27 of 27 after a model dream. Notes about the code (a dead command, a
+missing directory) cost a few turns and no failures, because the models checked the repository. Two
+control tasks passed in all 54 runs, so neither dream damaged good notes. Turns and cost per task did
+not improve. The tasks were written to run into the drift, so this shows which wrong notes cost a task
+and that a dream removes the cost, not how often your notes are wrong. Reproduce it with
+`python evals/claude_code/run.py`.
 
 **On the memory store.** `agentdream benchmark` builds a store where every defect is known (duplicates,
 stale values, notes the transcripts refute, reversed preferences, paraphrases, plus controls that must

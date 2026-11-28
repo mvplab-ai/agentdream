@@ -47,6 +47,7 @@ MEMORY = """\
 
 - Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)
 - Pricing logic is in `orders/pricing.py`.
+- Test fixtures live in `tests/data/`. (2026-01-09)
 
 ## Workflow
 
@@ -57,11 +58,16 @@ MEMORY = """\
 ## Conventions
 
 - Don't use dataclasses for new models — the team prefers plain dicts. (2026-01-05)
+- Don't use the logging module — print() is enough for this service. (2026-01-12)
+- Round money amounts to 2 decimals with `round()`.
 
 ## Service facts
 
 - The API server listens on port 8080. (2025-12-01)
 - The API server listens on port 9090. (2026-02-10)
+- The staging database host is `db-staging-1.internal`. (2025-11-20)
+- CI fails below 80% test coverage. (2025-10-01)
+- CI fails below 90% test coverage. (2026-02-01)
 """
 
 FILES = {
@@ -80,6 +86,17 @@ FILES = {
         '"""API server address."""\n\nHOST = "127.0.0.1"\nPORT = 9090\n\n\n'
         'def address() -> str:\n    """host:port the API server binds to."""\n    return f"{HOST}:{PORT}"\n'),
     "orders/models.py": '"""Data models."""\n',
+    "orders/service.py": (
+        '"""Order operations."""\n\n\ndef confirm(order_id: str) -> bool:\n'
+        '    """Mark an order as confirmed."""\n    return True\n'),
+    "pyproject.toml": '[project]\nname = "orders"\nversion = "1.3.0"\nrequires-python = ">=3.10"\n',
+    "tests/fixtures/order_basic.json": '{"id": "A-1", "items": [{"price": 2.5, "quantity": 2}]}\n',
+    "tests/test_fixtures.py": (
+        "import json\nimport unittest\nfrom pathlib import Path\n\nfrom orders.pricing import subtotal\n\n"
+        'FIXTURES = Path(__file__).parent / "fixtures"\n\n\nclass FixtureTest(unittest.TestCase):\n'
+        "    def test_basic_order(self):\n"
+        '        order = json.loads((FIXTURES / "order_basic.json").read_text())\n'
+        '        self.assertEqual(subtotal(order["items"]), 5.0)\n'),
     "config/settings.json": '{\n  "timeout_seconds": 30,\n  "max_retries": 3\n}\n',
     "tests/__init__.py": "",
     "tests/test_pricing.py": (
@@ -123,6 +140,22 @@ SESSIONS = {
         ("assistant", "curl localhost:8080/health failed: connection refused. The API server listens on port "
                       "9090, not 8080.", "2026-03-09T10:09:00Z"),
     ],
+    "session-04.jsonl": [
+        ("assistant", "Looked for the test fixtures in tests/data/. That directory does not exist.",
+         "2026-03-12T11:00:00Z"),
+        ("assistant", "Found them. Test fixtures live in tests/fixtures/.", "2026-03-12T11:01:00Z"),
+        ("user", "Yes, test fixtures live in tests/fixtures/. There is no tests/data.", "2026-03-12T11:02:00Z"),
+        ("user", "Actually, let's use the logging module from now on.", "2026-03-12T11:10:00Z"),
+        ("assistant", "Understood, new code will use the logging module instead of print().",
+         "2026-03-12T11:10:30Z"),
+    ],
+    "session-05.jsonl": [
+        ("assistant", "Connecting to db-staging-1.internal failed: host not found.", "2026-03-15T16:00:00Z"),
+        ("user", "db-staging-1 was decommissioned last month. The staging database host is db-staging-3.internal "
+                 "now.", "2026-03-15T16:01:00Z"),
+        ("assistant", "Connected to db-staging-3.internal. The staging database is reachable.",
+         "2026-03-15T16:02:00Z"),
+    ],
 }
 
 
@@ -159,10 +192,55 @@ def check_healthcheck(project: Path) -> bool:
     return "8080" not in text and ("9090" in text or "PORT" in text or "address" in text)
 
 
+def check_logging(project: Path) -> bool:
+    src = (project / "orders" / "service.py").read_text(encoding="utf-8")
+    return ("logging" in src and "print(" not in src
+            and _py(project, "from orders.service import cancel; assert cancel('A-1') is True"))
+
+
+def check_fixture(project: Path) -> bool:
+    new = project / "tests" / "fixtures" / "sample_order.json"
+    if not new.is_file() or (project / "tests" / "data").exists():
+        return False
+    try:
+        json.loads(new.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    return _tests_pass(project)
+
+
+def check_staging(project: Path) -> bool:
+    script = project / "scripts" / "staging_dsn.py"
+    if not script.is_file():
+        return False
+    text = script.read_text(encoding="utf-8")
+    return "db-staging-3.internal" in text and "db-staging-1" not in text
+
+
+def check_coverage(project: Path) -> bool:
+    code = ("import tomllib; d = tomllib.load(open('pyproject.toml', 'rb')); "
+            "assert d['tool']['coverage']['report']['fail_under'] == 90")
+    return _py(project, code)
+
+
+def check_discount(project: Path) -> bool:
+    code = ("from orders.pricing import discount; "
+            "assert discount([{'price': 10.0, 'quantity': 3}], 15) == 25.5; "
+            "assert discount([{'price': 0.1, 'quantity': 3}], 10) == 0.27")
+    return _py(project, code) and _tests_pass(project)
+
+
+def check_item_count(project: Path) -> bool:
+    code = ("from orders.pricing import item_count; "
+            "assert item_count([{'price': 1.0, 'quantity': 2}, {'price': 3.0, 'quantity': 5}]) == 7; "
+            "assert (item_count.__doc__ or '').strip()")
+    return _py(project, code)
+
+
 @dataclasses.dataclass
 class Task:
     id: str
-    drift: str  # which kind of bad note this task runs into
+    drift: str  # which kind of bad note this task runs into ("" for a control: the notes it needs are right)
     prompt: str
     check: Callable[[Path], bool]
 
@@ -178,6 +256,24 @@ TASKS = [
     Task("healthcheck", "stale value next to its replacement",
          "Add scripts/healthcheck.py: it sends a GET request to /health on the local API server and exits 0 if "
          "the status is 200, 1 otherwise. Use the port the API server listens on.", check_healthcheck),
+    Task("logging", "note states a preference the user reversed",
+         "Add a function cancel(order_id) to orders/service.py. It records a message saying which order was "
+         "cancelled and returns True.", check_logging),
+    Task("fixture", "note names a directory that does not exist",
+         "Add a test fixture sample_order.json (one order with two items) alongside the existing test fixtures, "
+         "and a test that loads it and checks its subtotal.", check_fixture),
+    Task("staging", "note gives a value that changed; the code does not contain it",
+         "Add scripts/staging_dsn.py: it prints the Postgres DSN for the staging database (user orders, "
+         "database orders, port 5432).", check_staging),
+    Task("coverage", "stale value next to its replacement",
+         "Add a [tool.coverage.report] section to pyproject.toml that fails the run below the coverage "
+         "threshold CI enforces.", check_coverage),
+    Task("discount", "",
+         "Add a function discount(items, percent) to orders/pricing.py that returns the subtotal with the "
+         "percentage discount taken off.", check_discount),
+    Task("item_count", "",
+         "Add a function item_count(items) to orders/pricing.py that returns the total quantity across the "
+         "items.", check_item_count),
 ]
 
 ALLOWED = ["Read", "Edit", "Write", "Glob", "Grep", "Bash(python:*)", "Bash(python3:*)", "Bash(make:*)",
@@ -262,8 +358,8 @@ def summarise(rows: list[dict], arms: list[str]) -> dict:
     return out
 
 
-def render(result: dict) -> str:
-    arms, s = result["arms"], result["summary"]
+def render(result: dict, arms: list[str]) -> str:
+    s = result["summary"]
     lines = [f"Claude Code on {len(TASKS)} tasks, {result['repeats']} run(s) each, model: {result['model']}", "",
              "| Memory file | Tasks passed | Mean turns | Mean seconds | Mean cost |", "|---|---|---|---|---|"]
     for arm in arms:
@@ -276,13 +372,15 @@ def render(result: dict) -> str:
         for arm in arms:
             t = s["by_task"][task.id][arm]
             cells.append(f"{t['passed']}/{t['runs']} passed, {t['turns']} turns")
-        lines.append(f"| {task.id} | {task.drift} | " + " | ".join(cells) + " |")
+        lines.append(f"| {task.id} | {task.drift or 'control: the notes it needs are right'} | "
+                     + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--model", default=None, help="model for the Claude Code runs (default: your default)")
+    ap.add_argument("--models", default="sonnet",
+                    help="comma-separated models for the Claude Code runs; 'default' is your default model")
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--dream-backend", default="claude-cli", help="backend for the after-model arm; 'none' skips it")
     ap.add_argument("--dream-model", default=None)
@@ -304,16 +402,25 @@ def main() -> int:
     if args.only_dream:
         return 0
 
-    jobs = [(arm, memories[arm], task, rep) for rep in range(1, args.repeats + 1) for task in TASKS
-            for arm in memories]
-    with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
-        rows = list(pool.map(lambda j: run_one(work, j[0], j[1], j[2], j[3], args.model, args.timeout), jobs))
-    used = sorted({m for r in rows for m in r.get("models") or []})
-    result = {"model": ", ".join(used) or args.model or "default", "repeats": args.repeats,
-              "arms": list(memories), "memories": memories, "dreams": dreams, "rows": rows,
-              "summary": summarise(rows, list(memories))}
-    Path(args.out).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print("\n" + render(result))
+    arms = list(memories)
+    out: dict = {"arms": arms, "tasks": [{"id": t.id, "drift": t.drift, "prompt": t.prompt} for t in TASKS],
+                 "memories": memories, "dreams": dreams, "models": {}}
+    for name in [m.strip() for m in args.models.split(",") if m.strip()]:
+        model = None if name == "default" else name
+        mwork = work / name
+        jobs = [(arm, memories[arm], task, rep) for rep in range(1, args.repeats + 1) for task in TASKS
+                for arm in arms]
+        print(f"----- model: {name} ({len(jobs)} runs) -----", flush=True)
+        with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:
+            rows = list(pool.map(lambda j, m=model, w=mwork: run_one(w, j[0], j[1], j[2], j[3], m, args.timeout),
+                                 jobs))
+        used = sorted({m for r in rows for m in r.get("models") or []})
+        result = {"model": ", ".join(used) or name, "repeats": args.repeats, "rows": rows,
+                  "summary": summarise(rows, arms),
+                  "cost_usd": round(sum(r.get("cost_usd") or 0 for r in rows), 2)}
+        out["models"][name] = result
+        Path(args.out).write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")  # keep what has finished
+        print("\n" + render(result, arms), flush=True)
     print(f"results: {args.out}")
     shutil.rmtree(work, ignore_errors=True)
     return 0
