@@ -1,37 +1,93 @@
 {
-  "model": "claude-sonnet-5-5",
-  "repeats": 3,
   "arms": [
     "before",
     "after-rules",
     "after-model"
   ],
+  "tasks": [
+    {
+      "id": "timeout",
+      "drift": "note points at the wrong file",
+      "prompt": "Raise the request timeout to 45 seconds."
+    },
+    {
+      "id": "tax",
+      "drift": "note gives a command that no longer exists",
+      "prompt": "Add a function total_with_tax(items, rate) to orders/pricing.py that returns the subtotal plus tax, rounded to 2 decimals. Run the test suite to confirm nothing broke."
+    },
+    {
+      "id": "model",
+      "drift": "note states a preference the user reversed",
+      "prompt": "Add an Address model with street, city and postcode fields to orders/models.py."
+    },
+    {
+      "id": "healthcheck",
+      "drift": "stale value next to its replacement",
+      "prompt": "Add scripts/healthcheck.py: it sends a GET request to /health on the local API server and exits 0 if the status is 200, 1 otherwise. Use the port the API server listens on."
+    },
+    {
+      "id": "logging",
+      "drift": "note states a preference the user reversed",
+      "prompt": "Add a function cancel(order_id) to orders/service.py. It records a message saying which order was cancelled and returns True."
+    },
+    {
+      "id": "fixture",
+      "drift": "note names a directory that does not exist",
+      "prompt": "Add a test fixture sample_order.json (one order with two items) alongside the existing test fixtures, and a test that loads it and checks its subtotal."
+    },
+    {
+      "id": "staging",
+      "drift": "note gives a value that changed; the code does not contain it",
+      "prompt": "Add scripts/staging_dsn.py: it prints the Postgres DSN for the staging database (user orders, database orders, port 5432)."
+    },
+    {
+      "id": "coverage",
+      "drift": "stale value next to its replacement",
+      "prompt": "Add a [tool.coverage.report] section to pyproject.toml that fails the run below the coverage threshold CI enforces."
+    },
+    {
+      "id": "discount",
+      "drift": "",
+      "prompt": "Add a function discount(items, percent) to orders/pricing.py that returns the subtotal with the percentage discount taken off."
+    },
+    {
+      "id": "item_count",
+      "drift": "",
+      "prompt": "Add a function item_count(items) to orders/pricing.py that returns the total quantity across the items."
+    }
+  ],
   "memories": {
-    "before": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Run the tests with `make test` before every commit.\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Don't use dataclasses for new models \u2014 the team prefers plain dicts. (2026-01-05)\n\n## Service facts\n\n- The API server listens on port 8080. (2025-12-01)\n- The API server listens on port 9090. (2026-02-10)\n",
-    "after-rules": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (History: earlier said \"Don't use dataclasses for new models \u2014 the team prefers plain dicts\" (2026-01-05); reversed later (sessions/session-03.jsonl:3).)\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n\n## Recurring mistakes\n\n- Recurring mistake (2 occurrences across 2 sessions): \"Failed: No rule to make target 'test'\" \u2014 check before repeating.\n\n## Workflows\n\n- Converged workflow (used in 2 sessions): `make test` \u2192 `python -m unittest discover -s`.\n",
-    "after-model": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `orders/defaults.py`. `config/settings.json` is a dead leftover file that nothing reads. (2026-03-02)\n- Pricing logic is in `orders/pricing.py`.\n\n## Workflow\n\n- Run the test suite with `python -m unittest discover -s tests` before every commit. The Makefile was removed, so `make test` no longer works. (2026-03-05)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (2026-03-09) (History: until 2026-03-09 the team preferred plain dicts and avoided dataclasses, per the 2026-01-05 note.)\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n\n## Insights\n\n- Recurring mistake: acting on stale notes without checking them. Before relying on a noted path, command or port, verify it against the repo or running service (e.g. confirm the file is actually read, the Makefile exists, the port answers). When a note proves wrong, fix the note in the same session \u2014 the `make test` failure repeated on 2026-03-09 after it had already been diagnosed on 2026-03-05. (2026-03-09)\n"
+    "before": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n- Test fixtures live in `tests/data/`. (2026-01-09)\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Run the tests with `make test` before every commit.\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Don't use dataclasses for new models \u2014 the team prefers plain dicts. (2026-01-05)\n- Don't use the logging module \u2014 print() is enough for this service. (2026-01-12)\n- Round money amounts to 2 decimals with `round()`.\n\n## Service facts\n\n- The API server listens on port 8080. (2025-12-01)\n- The API server listens on port 9090. (2026-02-10)\n- The staging database host is `db-staging-1.internal`. (2025-11-20)\n- CI fails below 80% test coverage. (2025-10-01)\n- CI fails below 90% test coverage. (2026-02-01)\n",
+    "after-rules": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `config/settings.json`. (2026-01-08)\n- Pricing logic is in `orders/pricing.py`.\n- Test fixtures live in `tests/data/`. (2026-01-09)\n\n## Workflow\n\n- Run the test suite with `make test` before committing. (2026-01-10)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (History: earlier said \"Don't use dataclasses for new models \u2014 the team prefers plain dicts\" (2026-01-05); reversed later (sessions/session-03.jsonl:3).)\n- Use the logging module. (History: earlier said \"Don't use the logging module \u2014 print is enough for this service\" (2026-01-12); reversed later (sessions/session-04.jsonl:4).)\n- Round money amounts to 2 decimals with `round()`.\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n- The staging database host is `db-staging-1.internal`. (2025-11-20)\n- CI fails below 80% test coverage. (2025-10-01)\n- CI fails below 90% test coverage. (2026-02-01)\n\n## Recurring mistakes\n\n- Recurring mistake (2 occurrences across 2 sessions): \"Failed: No rule to make target 'test'\" \u2014 check before repeating.\n\n## Workflows\n\n- Converged workflow (used in 2 sessions): `make test` \u2192 `python -m unittest discover -s`.\n",
+    "after-model": "# Project notes\n\n## Layout\n\n- Runtime settings (timeouts, retry limits) live in `orders/defaults.py`. `config/settings.json` is a dead leftover file that nothing reads. (2026-03-02)\n- Pricing logic is in `orders/pricing.py`.\n- Test fixtures live in `tests/fixtures/`. There is no `tests/data/`. (2026-03-12)\n\n## Workflow\n\n- Run the test suite with `python -m unittest discover -s tests` before every commit. The Makefile was removed, so `make test` no longer works. (2026-03-05)\n- Keep functions small and give every public function a docstring.\n\n## Conventions\n\n- Use dataclasses for new models. (2026-03-09) (History: until 2026-03-09 the team avoided dataclasses and preferred plain dicts.)\n- Use the logging module in new code instead of print(). (2026-03-12) (History: until 2026-03-12 the convention was print() only, no logging module.)\n- Round money amounts to 2 decimals with `round()`.\n\n## Service facts\n\n- The API server listens on port 9090. (2026-02-10)\n- The staging database host is `db-staging-3.internal`. `db-staging-1.internal` was decommissioned. (2026-03-15)\n- CI fails below 90% test coverage. (2026-02-01)\n\n## Insights\n\n- Recurring mistake: acting on a stale note without checking it first. Before relying on a noted path, command, port or host, verify it still exists (e.g. `ls` the path, check the Makefile target). When a note proves wrong, fix the note in the same session \u2014 `make test` failed on 2026-03-05 and was run again on 2026-03-09 because the note was never updated. (2026-03-15)\n- When the user says \"Actually, let's ... from now on\", treat it as a standing convention change that replaces the earlier rule for new code. Update the Conventions note right away and keep a short history of the old rule. (Seen 2026-03-09 for dataclasses and 2026-03-12 for logging.)\n"
   },
   "dreams": {
     "after-rules": {
       "backend": "deterministic",
       "operations": [
         {
-          "id": "merge-9b7e8198",
+          "id": "merge-c62ce087",
           "type": "merge",
           "confidence": 0.85,
-          "summary": "Merged 2 duplicate notes into CLAUDE.md#3"
+          "summary": "Merged 2 duplicate notes into CLAUDE.md#4"
         },
         {
-          "id": "replace-c65441c7",
+          "id": "replace-c88a6555",
           "type": "replace",
           "confidence": 0.75,
           "summary": "Stale value replaced by the latest: \"The API server listens on port 9090. (2026-02-10)\""
         },
         {
-          "id": "contradiction-f27dce30",
+          "id": "contradiction-d135d703",
           "type": "contradiction",
           "confidence": 0.7,
           "summary": "Preference reversed in later sessions: now \"Use dataclasses for new models.\""
+        },
+        {
+          "id": "contradiction-d9013fd6",
+          "type": "contradiction",
+          "confidence": 0.7,
+          "summary": "Preference reversed in later sessions: now \"Use the logging module.\""
         },
         {
           "id": "insight-bde11a81",
@@ -52,16 +108,22 @@
       "backend": "claude-cli",
       "operations": [
         {
-          "id": "merge-e38629b3",
+          "id": "merge-28f0a575",
           "type": "merge",
-          "confidence": 0.96,
-          "summary": "Merge duplicate `make test` before-commit notes"
+          "confidence": 0.95,
+          "summary": "Merge duplicate `make test` before commit notes"
         },
         {
-          "id": "replace-c65441c7",
+          "id": "replace-c88a6555",
           "type": "replace",
           "confidence": 0.9,
           "summary": "API server port 8080 superseded by 9090"
+        },
+        {
+          "id": "replace-1faaf5b4",
+          "type": "replace",
+          "confidence": 0.9,
+          "summary": "CI coverage threshold 80% superseded by 90%"
         },
         {
           "id": "correct-44724035",
@@ -70,686 +132,4893 @@
           "summary": "Runtime settings live in orders/defaults.py, not config/settings.json"
         },
         {
-          "id": "correct-bbbfd302",
+          "id": "correct-292a1b7b",
           "type": "correct",
           "confidence": 0.97,
-          "summary": "Test command is `python -m unittest discover -s tests`; `make test` fails because the Makefile was removed"
+          "summary": "Test command is `python -m unittest discover -s tests`; `make test` no longer exists"
         },
         {
-          "id": "contradiction-4ac32725",
+          "id": "correct-8e5dc14e",
+          "type": "correct",
+          "confidence": 0.97,
+          "summary": "Test fixtures live in tests/fixtures/, not tests/data/"
+        },
+        {
+          "id": "correct-5c301cb4",
+          "type": "correct",
+          "confidence": 0.97,
+          "summary": "Staging database host is db-staging-3.internal; db-staging-1 was decommissioned"
+        },
+        {
+          "id": "contradiction-d757716d",
           "type": "contradiction",
           "confidence": 0.95,
-          "summary": "Dataclass preference reversed: new models now use dataclasses"
+          "summary": "Preference reversed: use dataclasses for new models"
         },
         {
-          "id": "insight-6b28fa00",
+          "id": "contradiction-ddac735d",
+          "type": "contradiction",
+          "confidence": 0.95,
+          "summary": "Preference reversed: use the logging module instead of print()"
+        },
+        {
+          "id": "insight-d0dd24be",
           "type": "insight",
-          "confidence": 0.8,
-          "summary": "Stale notes repeatedly caused failed actions across three sessions; verify notes before acting and fix them immediately."
+          "confidence": 0.86,
+          "summary": "Verify noted paths, commands, ports and hosts before use, and fix stale notes immediately"
+        },
+        {
+          "id": "insight-b2389394",
+          "type": "insight",
+          "confidence": 0.7,
+          "summary": "The user's \"Actually, let's ... from now on\" statements are durable convention reversals"
         }
       ],
       "warnings": []
     }
   },
-  "rows": [
-    {
-      "arm": "before",
-      "task": "timeout",
-      "rep": 1,
-      "turns": 3,
-      "seconds": 4.6,
-      "cost_usd": 0.0928,
-      "output_tokens": 341,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "timeout",
-      "rep": 1,
-      "turns": 3,
-      "seconds": 4.4,
-      "cost_usd": 0.0934,
-      "output_tokens": 345,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-model",
-      "task": "timeout",
-      "rep": 1,
-      "turns": 5,
-      "seconds": 7.1,
-      "cost_usd": 0.1012,
-      "output_tokens": 770,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "tax",
-      "rep": 1,
-      "turns": 5,
-      "seconds": 7.7,
-      "cost_usd": 0.1005,
-      "output_tokens": 843,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "tax",
-      "rep": 1,
-      "turns": 5,
-      "seconds": 7.7,
-      "cost_usd": 0.0495,
-      "output_tokens": 944,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "tax",
-      "rep": 1,
-      "turns": 5,
-      "seconds": 6.9,
-      "cost_usd": 0.0482,
-      "output_tokens": 818,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "model",
-      "rep": 1,
-      "turns": 3,
-      "seconds": 5.1,
-      "cost_usd": 0.0414,
-      "output_tokens": 470,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "model",
-      "rep": 1,
-      "turns": 3,
-      "seconds": 4.6,
-      "cost_usd": 0.0408,
-      "output_tokens": 380,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "model",
-      "rep": 1,
-      "turns": 3,
-      "seconds": 4.4,
-      "cost_usd": 0.0411,
-      "output_tokens": 394,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "healthcheck",
-      "rep": 1,
-      "turns": 6,
-      "seconds": 12.1,
-      "cost_usd": 0.0623,
-      "output_tokens": 1468,
-      "denials": 2,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "healthcheck",
-      "rep": 1,
-      "turns": 2,
-      "seconds": 4.1,
-      "cost_usd": 0.0396,
-      "output_tokens": 460,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "healthcheck",
-      "rep": 1,
-      "turns": 10,
-      "seconds": 14.4,
-      "cost_usd": 0.0699,
-      "output_tokens": 1592,
-      "denials": 2,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "timeout",
-      "rep": 2,
-      "turns": 3,
-      "seconds": 4.2,
-      "cost_usd": 0.0398,
-      "output_tokens": 341,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "timeout",
-      "rep": 2,
-      "turns": 3,
-      "seconds": 4.0,
-      "cost_usd": 0.0401,
-      "output_tokens": 328,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-model",
-      "task": "timeout",
-      "rep": 2,
-      "turns": 4,
-      "seconds": 5.4,
-      "cost_usd": 0.0448,
-      "output_tokens": 553,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "tax",
-      "rep": 2,
-      "turns": 6,
-      "seconds": 8.3,
-      "cost_usd": 0.0513,
-      "output_tokens": 949,
-      "denials": 1,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "tax",
-      "rep": 2,
-      "turns": 5,
-      "seconds": 7.4,
-      "cost_usd": 0.0488,
-      "output_tokens": 907,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "tax",
-      "rep": 2,
-      "turns": 5,
-      "seconds": 7.3,
-      "cost_usd": 0.0488,
-      "output_tokens": 864,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "model",
-      "rep": 2,
-      "turns": 3,
-      "seconds": 5.7,
-      "cost_usd": 0.0413,
-      "output_tokens": 473,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "model",
-      "rep": 2,
-      "turns": 4,
-      "seconds": 5.7,
-      "cost_usd": 0.0438,
-      "output_tokens": 445,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "model",
-      "rep": 2,
-      "turns": 3,
-      "seconds": 5.3,
-      "cost_usd": 0.0414,
-      "output_tokens": 410,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "healthcheck",
-      "rep": 2,
-      "turns": 9,
-      "seconds": 14.1,
-      "cost_usd": 0.0675,
-      "output_tokens": 1435,
-      "denials": 3,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "healthcheck",
-      "rep": 2,
-      "turns": 2,
-      "seconds": 4.5,
-      "cost_usd": 0.04,
-      "output_tokens": 493,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "healthcheck",
-      "rep": 2,
-      "turns": 11,
-      "seconds": 19.1,
-      "cost_usd": 0.0835,
-      "output_tokens": 2180,
-      "denials": 1,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "timeout",
-      "rep": 3,
-      "turns": 3,
-      "seconds": 4.1,
-      "cost_usd": 0.0398,
-      "output_tokens": 341,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "timeout",
-      "rep": 3,
-      "turns": 3,
-      "seconds": 4.1,
-      "cost_usd": 0.0404,
-      "output_tokens": 351,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-model",
-      "task": "timeout",
-      "rep": 3,
-      "turns": 4,
-      "seconds": 5.6,
-      "cost_usd": 0.0448,
-      "output_tokens": 558,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "tax",
-      "rep": 3,
-      "turns": 5,
-      "seconds": 7.2,
-      "cost_usd": 0.0475,
-      "output_tokens": 826,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "tax",
-      "rep": 3,
-      "turns": 5,
-      "seconds": 7.3,
-      "cost_usd": 0.0489,
-      "output_tokens": 893,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "tax",
-      "rep": 3,
-      "turns": 5,
-      "seconds": 8.6,
-      "cost_usd": 0.0492,
-      "output_tokens": 906,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "model",
-      "rep": 3,
-      "turns": 3,
-      "seconds": 5.0,
-      "cost_usd": 0.0416,
-      "output_tokens": 506,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": false
-    },
-    {
-      "arm": "after-rules",
-      "task": "model",
-      "rep": 3,
-      "turns": 3,
-      "seconds": 4.6,
-      "cost_usd": 0.0409,
-      "output_tokens": 393,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "model",
-      "rep": 3,
-      "turns": 3,
-      "seconds": 4.9,
-      "cost_usd": 0.0415,
-      "output_tokens": 416,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "before",
-      "task": "healthcheck",
-      "rep": 3,
-      "turns": 7,
-      "seconds": 13.1,
-      "cost_usd": 0.0647,
-      "output_tokens": 1606,
-      "denials": 3,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-rules",
-      "task": "healthcheck",
-      "rep": 3,
-      "turns": 2,
-      "seconds": 4.7,
-      "cost_usd": 0.0404,
-      "output_tokens": 540,
-      "denials": 0,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    },
-    {
-      "arm": "after-model",
-      "task": "healthcheck",
-      "rep": 3,
-      "turns": 9,
-      "seconds": 12.3,
-      "cost_usd": 0.0645,
-      "output_tokens": 1527,
-      "denials": 1,
-      "error": false,
-      "models": [
-        "claude-sonnet-5-5"
-      ],
-      "passed": true
-    }
-  ],
-  "summary": {
-    "overall": {
-      "before": {
-        "passed": 6,
-        "runs": 12,
-        "turns": 4.67,
-        "seconds": 7.6,
-        "cost_usd": 0.06
-      },
-      "after-rules": {
-        "passed": 9,
-        "runs": 12,
-        "turns": 3.33,
-        "seconds": 5.26,
-        "cost_usd": 0.05
-      },
-      "after-model": {
-        "passed": 12,
-        "runs": 12,
-        "turns": 5.58,
-        "seconds": 8.44,
-        "cost_usd": 0.06
-      }
-    },
-    "by_task": {
-      "timeout": {
-        "before": {
-          "passed": 0,
-          "runs": 3,
+  "models": {
+    "sonnet": {
+      "model": "claude-sonnet-5-5",
+      "repeats": 3,
+      "rows": [
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 1,
           "turns": 3,
-          "seconds": 4.3,
-          "cost_usd": 0.06
+          "seconds": 4.7,
+          "cost_usd": 0.0937,
+          "output_tokens": 353,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
         },
-        "after-rules": {
-          "passed": 0,
-          "runs": 3,
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 1,
           "turns": 3,
-          "seconds": 4.17,
-          "cost_usd": 0.06
+          "seconds": 4.9,
+          "cost_usd": 0.0942,
+          "output_tokens": 340,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
         },
-        "after-model": {
-          "passed": 3,
-          "runs": 3,
-          "turns": 4.33,
-          "seconds": 6.03,
-          "cost_usd": 0.06
-        }
-      },
-      "tax": {
-        "before": {
-          "passed": 3,
-          "runs": 3,
-          "turns": 5.33,
-          "seconds": 7.73,
-          "cost_usd": 0.07
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.0,
+          "cost_usd": 0.0962,
+          "output_tokens": 448,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
         },
-        "after-rules": {
-          "passed": 3,
-          "runs": 3,
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 1,
           "turns": 5,
-          "seconds": 7.47,
-          "cost_usd": 0.05
+          "seconds": 8.0,
+          "cost_usd": 0.1027,
+          "output_tokens": 917,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
         },
-        "after-model": {
-          "passed": 3,
-          "runs": 3,
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 1,
           "turns": 5,
           "seconds": 7.6,
-          "cost_usd": 0.05
-        }
-      },
-      "model": {
-        "before": {
-          "passed": 0,
-          "runs": 3,
+          "cost_usd": 0.1031,
+          "output_tokens": 942,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 6.4,
+          "cost_usd": 0.0483,
+          "output_tokens": 771,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 1,
           "turns": 3,
-          "seconds": 5.27,
-          "cost_usd": 0.04
+          "seconds": 4.7,
+          "cost_usd": 0.0415,
+          "output_tokens": 440,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
         },
-        "after-rules": {
-          "passed": 3,
-          "runs": 3,
-          "turns": 3.33,
-          "seconds": 4.97,
-          "cost_usd": 0.04
-        },
-        "after-model": {
-          "passed": 3,
-          "runs": 3,
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 1,
           "turns": 3,
-          "seconds": 4.87,
-          "cost_usd": 0.04
-        }
-      },
-      "healthcheck": {
-        "before": {
-          "passed": 3,
-          "runs": 3,
-          "turns": 7.33,
-          "seconds": 13.1,
-          "cost_usd": 0.06
+          "seconds": 4.5,
+          "cost_usd": 0.0418,
+          "output_tokens": 411,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
         },
-        "after-rules": {
-          "passed": 3,
-          "runs": 3,
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 4.4,
+          "cost_usd": 0.0424,
+          "output_tokens": 402,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 9.4,
+          "cost_usd": 0.055,
+          "output_tokens": 1132,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 1,
           "turns": 2,
-          "seconds": 4.43,
-          "cost_usd": 0.04
+          "seconds": 6.2,
+          "cost_usd": 0.0442,
+          "output_tokens": 749,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
         },
-        "after-model": {
-          "passed": 3,
-          "runs": 3,
-          "turns": 10,
-          "seconds": 15.27,
-          "cost_usd": 0.07
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 11.5,
+          "cost_usd": 0.0636,
+          "output_tokens": 1423,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0423,
+          "output_tokens": 465,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 4.7,
+          "cost_usd": 0.041,
+          "output_tokens": 362,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 6.6,
+          "cost_usd": 0.0443,
+          "output_tokens": 527,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 12.5,
+          "cost_usd": 0.0676,
+          "output_tokens": 1596,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 15.1,
+          "cost_usd": 0.0755,
+          "output_tokens": 1911,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 9.1,
+          "cost_usd": 0.0518,
+          "output_tokens": 864,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 6.2,
+          "cost_usd": 0.0439,
+          "output_tokens": 751,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 1,
+          "turns": 2,
+          "seconds": 4.8,
+          "cost_usd": 0.0409,
+          "output_tokens": 499,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 8.6,
+          "cost_usd": 0.0509,
+          "output_tokens": 835,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 4.7,
+          "cost_usd": 0.0412,
+          "output_tokens": 428,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0435,
+          "output_tokens": 523,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 6.5,
+          "cost_usd": 0.0453,
+          "output_tokens": 624,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.4,
+          "cost_usd": 0.0437,
+          "output_tokens": 584,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0443,
+          "output_tokens": 578,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.4,
+          "cost_usd": 0.0447,
+          "output_tokens": 550,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 4.6,
+          "cost_usd": 0.0425,
+          "output_tokens": 465,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 4.9,
+          "cost_usd": 0.0433,
+          "output_tokens": 484,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 5.2,
+          "cost_usd": 0.0444,
+          "output_tokens": 520,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.0,
+          "cost_usd": 0.0407,
+          "output_tokens": 352,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.2,
+          "cost_usd": 0.0414,
+          "output_tokens": 363,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.7,
+          "cost_usd": 0.0433,
+          "output_tokens": 463,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 6.8,
+          "cost_usd": 0.0486,
+          "output_tokens": 850,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 7.5,
+          "cost_usd": 0.0507,
+          "output_tokens": 977,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 6.7,
+          "cost_usd": 0.0499,
+          "output_tokens": 863,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0424,
+          "output_tokens": 493,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.5,
+          "cost_usd": 0.0415,
+          "output_tokens": 400,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.9,
+          "cost_usd": 0.0421,
+          "output_tokens": 412,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 8.3,
+          "cost_usd": 0.0494,
+          "output_tokens": 1003,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 2,
+          "seconds": 6.0,
+          "cost_usd": 0.0427,
+          "output_tokens": 637,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 9,
+          "seconds": 16.1,
+          "cost_usd": 0.0729,
+          "output_tokens": 1863,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.9,
+          "cost_usd": 0.0422,
+          "output_tokens": 453,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0431,
+          "output_tokens": 508,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 5.2,
+          "cost_usd": 0.0426,
+          "output_tokens": 424,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 8,
+          "seconds": 14.8,
+          "cost_usd": 0.0726,
+          "output_tokens": 1825,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 13.6,
+          "cost_usd": 0.0712,
+          "output_tokens": 1794,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 9.1,
+          "cost_usd": 0.0582,
+          "output_tokens": 1135,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 2,
+          "turns": 2,
+          "seconds": 5.2,
+          "cost_usd": 0.0405,
+          "output_tokens": 543,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 2,
+          "turns": 2,
+          "seconds": 4.4,
+          "cost_usd": 0.0399,
+          "output_tokens": 433,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 7.9,
+          "cost_usd": 0.0488,
+          "output_tokens": 836,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 5.2,
+          "cost_usd": 0.0427,
+          "output_tokens": 508,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.5,
+          "cost_usd": 0.0411,
+          "output_tokens": 366,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 7.6,
+          "cost_usd": 0.0494,
+          "output_tokens": 760,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 6.5,
+          "cost_usd": 0.0455,
+          "output_tokens": 683,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 5.3,
+          "cost_usd": 0.0443,
+          "output_tokens": 573,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 6.5,
+          "cost_usd": 0.0475,
+          "output_tokens": 739,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.9,
+          "cost_usd": 0.0414,
+          "output_tokens": 434,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.7,
+          "cost_usd": 0.0432,
+          "output_tokens": 471,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 3,
+          "seconds": 4.9,
+          "cost_usd": 0.0442,
+          "output_tokens": 504,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 3.8,
+          "cost_usd": 0.0404,
+          "output_tokens": 333,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.4,
+          "cost_usd": 0.0415,
+          "output_tokens": 372,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.6,
+          "cost_usd": 0.0432,
+          "output_tokens": 449,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 7.5,
+          "cost_usd": 0.0495,
+          "output_tokens": 778,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 7.1,
+          "cost_usd": 0.0499,
+          "output_tokens": 915,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 6.7,
+          "cost_usd": 0.0498,
+          "output_tokens": 852,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.4,
+          "cost_usd": 0.0424,
+          "output_tokens": 501,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 5.4,
+          "cost_usd": 0.0448,
+          "output_tokens": 452,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.5,
+          "cost_usd": 0.0425,
+          "output_tokens": 409,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 6.8,
+          "cost_usd": 0.0473,
+          "output_tokens": 760,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 2,
+          "seconds": 6.9,
+          "cost_usd": 0.045,
+          "output_tokens": 825,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 12.6,
+          "cost_usd": 0.0662,
+          "output_tokens": 1544,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.8,
+          "cost_usd": 0.0415,
+          "output_tokens": 435,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.1,
+          "cost_usd": 0.0434,
+          "output_tokens": 501,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.6,
+          "cost_usd": 0.0446,
+          "output_tokens": 557,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 14.1,
+          "cost_usd": 0.0723,
+          "output_tokens": 1815,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 14.8,
+          "cost_usd": 0.0746,
+          "output_tokens": 1894,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 11.0,
+          "cost_usd": 0.0641,
+          "output_tokens": 1417,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 3,
+          "turns": 2,
+          "seconds": 5.6,
+          "cost_usd": 0.0409,
+          "output_tokens": 564,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 3,
+          "turns": 2,
+          "seconds": 5.0,
+          "cost_usd": 0.0409,
+          "output_tokens": 505,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 9.0,
+          "cost_usd": 0.0512,
+          "output_tokens": 878,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.2,
+          "cost_usd": 0.0431,
+          "output_tokens": 546,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.3,
+          "cost_usd": 0.0413,
+          "output_tokens": 319,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 8.3,
+          "cost_usd": 0.0461,
+          "output_tokens": 691,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.0,
+          "cost_usd": 0.0432,
+          "output_tokens": 528,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 5.2,
+          "cost_usd": 0.0437,
+          "output_tokens": 533,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 6.1,
+          "cost_usd": 0.0471,
+          "output_tokens": 705,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.6,
+          "cost_usd": 0.0425,
+          "output_tokens": 470,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.7,
+          "cost_usd": 0.0431,
+          "output_tokens": 466,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 4.8,
+          "cost_usd": 0.0438,
+          "output_tokens": 470,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-sonnet-5-5"
+          ],
+          "passed": true
         }
-      }
+      ],
+      "summary": {
+        "overall": {
+          "before": {
+            "passed": 18,
+            "runs": 30,
+            "turns": 3.7,
+            "seconds": 6.47,
+            "cost_usd": 0.05
+          },
+          "after-rules": {
+            "passed": 24,
+            "runs": 30,
+            "turns": 3.5,
+            "seconds": 6.21,
+            "cost_usd": 0.05
+          },
+          "after-model": {
+            "passed": 30,
+            "runs": 30,
+            "turns": 4.23,
+            "seconds": 7.18,
+            "cost_usd": 0.05
+          }
+        },
+        "by_task": {
+          "timeout": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.17,
+              "cost_usd": 0.06
+            },
+            "after-rules": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.5,
+              "cost_usd": 0.06
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.77,
+              "cost_usd": 0.06
+            }
+          },
+          "tax": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 7.43,
+              "cost_usd": 0.07
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 7.4,
+              "cost_usd": 0.07
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 6.6,
+              "cost_usd": 0.05
+            }
+          },
+          "model": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.13,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.33,
+              "seconds": 4.8,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.6,
+              "cost_usd": 0.04
+            }
+          },
+          "healthcheck": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.67,
+              "seconds": 8.17,
+              "cost_usd": 0.05
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 2,
+              "seconds": 6.37,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8,
+              "seconds": 13.4,
+              "cost_usd": 0.07
+            }
+          },
+          "logging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.0,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.03,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.8,
+              "cost_usd": 0.04
+            }
+          },
+          "fixture": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 13.8,
+              "cost_usd": 0.07
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 14.5,
+              "cost_usd": 0.07
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 9.73,
+              "cost_usd": 0.06
+            }
+          },
+          "staging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 2.33,
+              "seconds": 5.67,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 2,
+              "seconds": 4.73,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 8.5,
+              "cost_usd": 0.05
+            }
+          },
+          "coverage": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.03,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.7,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.33,
+              "seconds": 7.47,
+              "cost_usd": 0.05
+            }
+          },
+          "discount": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.33,
+              "seconds": 5.63,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 5.27,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.67,
+              "seconds": 6.0,
+              "cost_usd": 0.05
+            }
+          },
+          "item_count": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.7,
+              "cost_usd": 0.04
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.77,
+              "cost_usd": 0.04
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3,
+              "seconds": 4.97,
+              "cost_usd": 0.04
+            }
+          }
+        }
+      },
+      "cost_usd": 4.53
+    },
+    "haiku": {
+      "model": "claude-haiku-5-5",
+      "repeats": 3,
+      "rows": [
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 11,
+          "seconds": 12.9,
+          "cost_usd": 0.0075,
+          "output_tokens": 2435,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 10.4,
+          "cost_usd": 0.0066,
+          "output_tokens": 1699,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 8.4,
+          "cost_usd": 0.0062,
+          "output_tokens": 1316,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 1,
+          "turns": 9,
+          "seconds": 12.4,
+          "cost_usd": 0.0071,
+          "output_tokens": 2351,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 10.9,
+          "cost_usd": 0.0068,
+          "output_tokens": 1986,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 11.1,
+          "cost_usd": 0.0043,
+          "output_tokens": 2345,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 10.5,
+          "cost_usd": 0.0039,
+          "output_tokens": 1839,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 7.4,
+          "cost_usd": 0.0035,
+          "output_tokens": 1116,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 6.5,
+          "cost_usd": 0.003,
+          "output_tokens": 1002,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 14,
+          "seconds": 25.0,
+          "cost_usd": 0.0081,
+          "output_tokens": 4651,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 18,
+          "seconds": 32.7,
+          "cost_usd": 0.0097,
+          "output_tokens": 5363,
+          "denials": 7,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 15,
+          "seconds": 25.5,
+          "cost_usd": 0.008,
+          "output_tokens": 4978,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 6.4,
+          "cost_usd": 0.0031,
+          "output_tokens": 879,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 10.6,
+          "cost_usd": 0.0043,
+          "output_tokens": 1801,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 8.6,
+          "cost_usd": 0.0036,
+          "output_tokens": 1472,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 16,
+          "seconds": 17.3,
+          "cost_usd": 0.0066,
+          "output_tokens": 3400,
+          "denials": 3,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 12.6,
+          "cost_usd": 0.0049,
+          "output_tokens": 2328,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 9.6,
+          "cost_usd": 0.0042,
+          "output_tokens": 1901,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 1,
+          "turns": 10,
+          "seconds": 16.9,
+          "cost_usd": 0.0059,
+          "output_tokens": 3266,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 13.3,
+          "cost_usd": 0.0048,
+          "output_tokens": 2408,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 20.5,
+          "cost_usd": 0.0062,
+          "output_tokens": 3791,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 9,
+          "seconds": 16.5,
+          "cost_usd": 0.0054,
+          "output_tokens": 2616,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 12.0,
+          "cost_usd": 0.0046,
+          "output_tokens": 2348,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 18,
+          "seconds": 27.3,
+          "cost_usd": 0.0085,
+          "output_tokens": 5052,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 9.2,
+          "cost_usd": 0.0036,
+          "output_tokens": 1638,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 9.5,
+          "cost_usd": 0.0039,
+          "output_tokens": 1587,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 10.5,
+          "cost_usd": 0.0042,
+          "output_tokens": 2207,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 11.2,
+          "cost_usd": 0.0043,
+          "output_tokens": 1921,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 8.5,
+          "cost_usd": 0.0037,
+          "output_tokens": 1268,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 8.5,
+          "cost_usd": 0.0038,
+          "output_tokens": 1612,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 10.1,
+          "cost_usd": 0.0041,
+          "output_tokens": 1749,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 10.8,
+          "cost_usd": 0.0042,
+          "output_tokens": 1858,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 8.5,
+          "cost_usd": 0.0035,
+          "output_tokens": 1236,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 2,
+          "turns": 11,
+          "seconds": 18.1,
+          "cost_usd": 0.0061,
+          "output_tokens": 3526,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 9.5,
+          "cost_usd": 0.0038,
+          "output_tokens": 1845,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 2,
+          "turns": 8,
+          "seconds": 10.7,
+          "cost_usd": 0.0043,
+          "output_tokens": 2055,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 7.0,
+          "cost_usd": 0.0031,
+          "output_tokens": 1204,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 8.2,
+          "cost_usd": 0.0036,
+          "output_tokens": 1155,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 8.4,
+          "cost_usd": 0.0036,
+          "output_tokens": 1208,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 13,
+          "seconds": 25.0,
+          "cost_usd": 0.0079,
+          "output_tokens": 4608,
+          "denials": 3,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 9,
+          "seconds": 22.9,
+          "cost_usd": 0.007,
+          "output_tokens": 4622,
+          "denials": 3,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 20,
+          "seconds": 38.3,
+          "cost_usd": 0.0117,
+          "output_tokens": 6727,
+          "denials": 7,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 6.6,
+          "cost_usd": 0.0032,
+          "output_tokens": 988,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 8.6,
+          "cost_usd": 0.0037,
+          "output_tokens": 1280,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 6.1,
+          "cost_usd": 0.0031,
+          "output_tokens": 1072,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 8,
+          "seconds": 13.2,
+          "cost_usd": 0.0051,
+          "output_tokens": 2339,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 12,
+          "seconds": 12.9,
+          "cost_usd": 0.0052,
+          "output_tokens": 2612,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 9.9,
+          "cost_usd": 0.0043,
+          "output_tokens": 1959,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 14.0,
+          "cost_usd": 0.005,
+          "output_tokens": 2340,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 11.4,
+          "cost_usd": 0.0044,
+          "output_tokens": 1906,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 2,
+          "turns": 13,
+          "seconds": 22.3,
+          "cost_usd": 0.007,
+          "output_tokens": 4281,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 10,
+          "seconds": 16.0,
+          "cost_usd": 0.0053,
+          "output_tokens": 2837,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 10,
+          "seconds": 17.0,
+          "cost_usd": 0.0055,
+          "output_tokens": 2950,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 12,
+          "seconds": 26.1,
+          "cost_usd": 0.0078,
+          "output_tokens": 4145,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 13.3,
+          "cost_usd": 0.0046,
+          "output_tokens": 2250,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 9.6,
+          "cost_usd": 0.0038,
+          "output_tokens": 1474,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 10.0,
+          "cost_usd": 0.004,
+          "output_tokens": 2071,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 8.7,
+          "cost_usd": 0.0037,
+          "output_tokens": 1375,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 8.4,
+          "cost_usd": 0.0037,
+          "output_tokens": 1285,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 8,
+          "seconds": 11.6,
+          "cost_usd": 0.0043,
+          "output_tokens": 1956,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 10.7,
+          "cost_usd": 0.0043,
+          "output_tokens": 1953,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 11,
+          "seconds": 12.7,
+          "cost_usd": 0.0048,
+          "output_tokens": 2338,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 8.4,
+          "cost_usd": 0.0036,
+          "output_tokens": 1387,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 13.1,
+          "cost_usd": 0.0049,
+          "output_tokens": 2175,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 10.2,
+          "cost_usd": 0.0041,
+          "output_tokens": 1844,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 10.8,
+          "cost_usd": 0.004,
+          "output_tokens": 1986,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 12.2,
+          "cost_usd": 0.0043,
+          "output_tokens": 2230,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 7.6,
+          "cost_usd": 0.0036,
+          "output_tokens": 1221,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 9.2,
+          "cost_usd": 0.0033,
+          "output_tokens": 1160,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 11,
+          "seconds": 23.9,
+          "cost_usd": 0.0075,
+          "output_tokens": 4398,
+          "denials": 3,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 23,
+          "seconds": 60.0,
+          "cost_usd": 0.0128,
+          "output_tokens": 7513,
+          "denials": 7,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 12,
+          "seconds": 57.4,
+          "cost_usd": 0.008,
+          "output_tokens": 5216,
+          "denials": 4,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 9.4,
+          "cost_usd": 0.0038,
+          "output_tokens": 1705,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 7.8,
+          "cost_usd": 0.0033,
+          "output_tokens": 1137,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 11.3,
+          "cost_usd": 0.0044,
+          "output_tokens": 1837,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 9,
+          "seconds": 15.2,
+          "cost_usd": 0.0055,
+          "output_tokens": 2575,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 10,
+          "seconds": 14.8,
+          "cost_usd": 0.0057,
+          "output_tokens": 2731,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 13.3,
+          "cost_usd": 0.0053,
+          "output_tokens": 2383,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 14.8,
+          "cost_usd": 0.0049,
+          "output_tokens": 2583,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 12.0,
+          "cost_usd": 0.0045,
+          "output_tokens": 1951,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 17.0,
+          "cost_usd": 0.0053,
+          "output_tokens": 2718,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 14.2,
+          "cost_usd": 0.0047,
+          "output_tokens": 2249,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 8.1,
+          "cost_usd": 0.0036,
+          "output_tokens": 1453,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 14.6,
+          "cost_usd": 0.0048,
+          "output_tokens": 2486,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 11.2,
+          "cost_usd": 0.0042,
+          "output_tokens": 2363,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 9.2,
+          "cost_usd": 0.0039,
+          "output_tokens": 1850,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 12.6,
+          "cost_usd": 0.0047,
+          "output_tokens": 2190,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 12.5,
+          "cost_usd": 0.0044,
+          "output_tokens": 1732,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 11.0,
+          "cost_usd": 0.0043,
+          "output_tokens": 1832,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 8.8,
+          "cost_usd": 0.0038,
+          "output_tokens": 1722,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "passed": true
+        }
+      ],
+      "summary": {
+        "overall": {
+          "before": {
+            "passed": 21,
+            "runs": 30,
+            "turns": 8.17,
+            "seconds": 13.58,
+            "cost_usd": 0.01
+          },
+          "after-rules": {
+            "passed": 27,
+            "runs": 30,
+            "turns": 7.63,
+            "seconds": 13.35,
+            "cost_usd": 0.0
+          },
+          "after-model": {
+            "passed": 30,
+            "runs": 30,
+            "turns": 7.87,
+            "seconds": 15.06,
+            "cost_usd": 0.01
+          }
+        },
+        "by_task": {
+          "timeout": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8.33,
+              "seconds": 11.23,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8.33,
+              "seconds": 11.3,
+              "cost_usd": 0.01
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 8.43,
+              "cost_usd": 0.0
+            }
+          },
+          "tax": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 9,
+              "seconds": 14.53,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.33,
+              "seconds": 10.2,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 10.87,
+              "cost_usd": 0.0
+            }
+          },
+          "model": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 9.9,
+              "cost_usd": 0.0
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 7.73,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 4.33,
+              "seconds": 8.03,
+              "cost_usd": 0.0
+            }
+          },
+          "healthcheck": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 12.67,
+              "seconds": 24.63,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 16.67,
+              "seconds": 38.53,
+              "cost_usd": 0.01
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 15.67,
+              "seconds": 40.4,
+              "cost_usd": 0.01
+            }
+          },
+          "logging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 4.67,
+              "seconds": 7.47,
+              "cost_usd": 0.0
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 9.0,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 8.67,
+              "cost_usd": 0.0
+            }
+          },
+          "fixture": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 11,
+              "seconds": 15.23,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 10,
+              "seconds": 13.43,
+              "cost_usd": 0.01
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.33,
+              "seconds": 10.93,
+              "cost_usd": 0.0
+            }
+          },
+          "staging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 15.23,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 6.33,
+              "seconds": 12.23,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 9.33,
+              "seconds": 19.93,
+              "cost_usd": 0.01
+            }
+          },
+          "coverage": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8.67,
+              "seconds": 15.57,
+              "cost_usd": 0.01
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 12.37,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 12,
+              "seconds": 22.67,
+              "cost_usd": 0.01
+            }
+          },
+          "discount": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 11.23,
+              "cost_usd": 0.0
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 9.43,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6,
+              "seconds": 11.03,
+              "cost_usd": 0.0
+            }
+          },
+          "item_count": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.33,
+              "seconds": 10.8,
+              "cost_usd": 0.0
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.67,
+              "seconds": 9.3,
+              "cost_usd": 0.0
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.67,
+              "seconds": 9.63,
+              "cost_usd": 0.0
+            }
+          }
+        }
+      },
+      "cost_usd": 0.45
+    },
+    "opus": {
+      "model": "claude-opus-5-5",
+      "repeats": 3,
+      "rows": [
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 11.7,
+          "cost_usd": 0.0941,
+          "output_tokens": 651,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 10,
+          "seconds": 27.1,
+          "cost_usd": 0.1502,
+          "output_tokens": 1815,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 14.3,
+          "cost_usd": 0.1072,
+          "output_tokens": 908,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 17.6,
+          "cost_usd": 0.1182,
+          "output_tokens": 1382,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 17.7,
+          "cost_usd": 0.1173,
+          "output_tokens": 1379,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 26.1,
+          "cost_usd": 0.159,
+          "output_tokens": 2420,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 12.0,
+          "cost_usd": 0.0962,
+          "output_tokens": 765,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 11.5,
+          "cost_usd": 0.0957,
+          "output_tokens": 773,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 13.0,
+          "cost_usd": 0.1019,
+          "output_tokens": 770,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 10,
+          "seconds": 34.9,
+          "cost_usd": 0.1757,
+          "output_tokens": 2545,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 23.4,
+          "cost_usd": 0.1404,
+          "output_tokens": 1611,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 31.9,
+          "cost_usd": 0.1798,
+          "output_tokens": 2850,
+          "denials": 3,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 1,
+          "turns": 4,
+          "seconds": 10.3,
+          "cost_usd": 0.0924,
+          "output_tokens": 747,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 15.8,
+          "cost_usd": 0.1086,
+          "output_tokens": 1002,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 17.6,
+          "cost_usd": 0.1193,
+          "output_tokens": 1341,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 24.0,
+          "cost_usd": 0.152,
+          "output_tokens": 2158,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 16.9,
+          "cost_usd": 0.1281,
+          "output_tokens": 1545,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 19.6,
+          "cost_usd": 0.1369,
+          "output_tokens": 1395,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 14.7,
+          "cost_usd": 0.1066,
+          "output_tokens": 1047,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 15.5,
+          "cost_usd": 0.1093,
+          "output_tokens": 1111,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 1,
+          "turns": 6,
+          "seconds": 19.3,
+          "cost_usd": 0.1219,
+          "output_tokens": 1358,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 3,
+          "seconds": 10.4,
+          "cost_usd": 0.091,
+          "output_tokens": 695,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 14.0,
+          "cost_usd": 0.1034,
+          "output_tokens": 885,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 13.6,
+          "cost_usd": 0.1073,
+          "output_tokens": 918,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 1,
+          "turns": 5,
+          "seconds": 14.1,
+          "cost_usd": 0.104,
+          "output_tokens": 1010,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 18.1,
+          "cost_usd": 0.1278,
+          "output_tokens": 1694,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 24.8,
+          "cost_usd": 0.1518,
+          "output_tokens": 2166,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 8,
+          "seconds": 22.1,
+          "cost_usd": 0.1358,
+          "output_tokens": 1666,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 17.6,
+          "cost_usd": 0.1264,
+          "output_tokens": 1607,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 1,
+          "turns": 7,
+          "seconds": 15.5,
+          "cost_usd": 0.1195,
+          "output_tokens": 1301,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 10,
+          "seconds": 29.2,
+          "cost_usd": 0.163,
+          "output_tokens": 2212,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 11,
+          "seconds": 30.1,
+          "cost_usd": 0.1646,
+          "output_tokens": 2267,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 13.6,
+          "cost_usd": 0.1076,
+          "output_tokens": 915,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 19.4,
+          "cost_usd": 0.1286,
+          "output_tokens": 1565,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 15.1,
+          "cost_usd": 0.1103,
+          "output_tokens": 1155,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 18.3,
+          "cost_usd": 0.1293,
+          "output_tokens": 1672,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 11.8,
+          "cost_usd": 0.0952,
+          "output_tokens": 706,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 14.6,
+          "cost_usd": 0.1021,
+          "output_tokens": 739,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 9.7,
+          "cost_usd": 0.0938,
+          "output_tokens": 661,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 22.7,
+          "cost_usd": 0.1365,
+          "output_tokens": 1757,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 27.5,
+          "cost_usd": 0.1585,
+          "output_tokens": 2445,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 2,
+          "turns": 10,
+          "seconds": 34.0,
+          "cost_usd": 0.181,
+          "output_tokens": 2745,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 15.3,
+          "cost_usd": 0.1061,
+          "output_tokens": 914,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 15.6,
+          "cost_usd": 0.108,
+          "output_tokens": 948,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 11.6,
+          "cost_usd": 0.1004,
+          "output_tokens": 876,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 10,
+          "seconds": 24.3,
+          "cost_usd": 0.1485,
+          "output_tokens": 2074,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 17.6,
+          "cost_usd": 0.1263,
+          "output_tokens": 1410,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 15.3,
+          "cost_usd": 0.1204,
+          "output_tokens": 1161,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 14.8,
+          "cost_usd": 0.106,
+          "output_tokens": 1046,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 2,
+          "turns": 6,
+          "seconds": 19.1,
+          "cost_usd": 0.125,
+          "output_tokens": 1485,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 21.0,
+          "cost_usd": 0.1289,
+          "output_tokens": 1407,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 13.0,
+          "cost_usd": 0.0994,
+          "output_tokens": 826,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 14.8,
+          "cost_usd": 0.1072,
+          "output_tokens": 1026,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 2,
+          "turns": 4,
+          "seconds": 12.3,
+          "cost_usd": 0.0994,
+          "output_tokens": 738,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 19.8,
+          "cost_usd": 0.1298,
+          "output_tokens": 1802,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 14.0,
+          "cost_usd": 0.1067,
+          "output_tokens": 1173,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 20.0,
+          "cost_usd": 0.1348,
+          "output_tokens": 1730,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 5,
+          "seconds": 13.6,
+          "cost_usd": 0.1027,
+          "output_tokens": 938,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 18.2,
+          "cost_usd": 0.1281,
+          "output_tokens": 1686,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 2,
+          "turns": 7,
+          "seconds": 17.8,
+          "cost_usd": 0.1208,
+          "output_tokens": 1340,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 9,
+          "seconds": 24.5,
+          "cost_usd": 0.1413,
+          "output_tokens": 1706,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 25.7,
+          "cost_usd": 0.1452,
+          "output_tokens": 1785,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "timeout",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 10.8,
+          "cost_usd": 0.098,
+          "output_tokens": 734,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "tax",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 18.8,
+          "cost_usd": 0.1262,
+          "output_tokens": 1492,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "tax",
+          "rep": 3,
+          "turns": 9,
+          "seconds": 26.1,
+          "cost_usd": 0.1582,
+          "output_tokens": 2303,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "tax",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 23.8,
+          "cost_usd": 0.1462,
+          "output_tokens": 2106,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "model",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 12.3,
+          "cost_usd": 0.0968,
+          "output_tokens": 766,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "model",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 13.5,
+          "cost_usd": 0.103,
+          "output_tokens": 862,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "model",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 11.0,
+          "cost_usd": 0.0955,
+          "output_tokens": 747,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 30.1,
+          "cost_usd": 0.159,
+          "output_tokens": 2304,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 10,
+          "seconds": 29.9,
+          "cost_usd": 0.1615,
+          "output_tokens": 2156,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "healthcheck",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 20.0,
+          "cost_usd": 0.134,
+          "output_tokens": 1590,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "logging",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 11.9,
+          "cost_usd": 0.0994,
+          "output_tokens": 917,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "logging",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 10.2,
+          "cost_usd": 0.0892,
+          "output_tokens": 597,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "logging",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 11.7,
+          "cost_usd": 0.098,
+          "output_tokens": 857,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 19.2,
+          "cost_usd": 0.1297,
+          "output_tokens": 1502,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 18.6,
+          "cost_usd": 0.1256,
+          "output_tokens": 1528,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "fixture",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 21.1,
+          "cost_usd": 0.1413,
+          "output_tokens": 1618,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "staging",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 13.1,
+          "cost_usd": 0.0997,
+          "output_tokens": 958,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-rules",
+          "task": "staging",
+          "rep": 3,
+          "turns": 5,
+          "seconds": 18.6,
+          "cost_usd": 0.1189,
+          "output_tokens": 1295,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": false
+        },
+        {
+          "arm": "after-model",
+          "task": "staging",
+          "rep": 3,
+          "turns": 8,
+          "seconds": 23.0,
+          "cost_usd": 0.1373,
+          "output_tokens": 1677,
+          "denials": 2,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 15.7,
+          "cost_usd": 0.1064,
+          "output_tokens": 1087,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 3,
+          "seconds": 11.2,
+          "cost_usd": 0.0932,
+          "output_tokens": 726,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "coverage",
+          "rep": 3,
+          "turns": 6,
+          "seconds": 17.4,
+          "cost_usd": 0.1166,
+          "output_tokens": 1191,
+          "denials": 1,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "discount",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 13.6,
+          "cost_usd": 0.1018,
+          "output_tokens": 962,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "discount",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 20.5,
+          "cost_usd": 0.1375,
+          "output_tokens": 2044,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "discount",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 18.7,
+          "cost_usd": 0.1296,
+          "output_tokens": 1691,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "before",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 4,
+          "seconds": 10.0,
+          "cost_usd": 0.0919,
+          "output_tokens": 713,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-rules",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 16.4,
+          "cost_usd": 0.1218,
+          "output_tokens": 1433,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        },
+        {
+          "arm": "after-model",
+          "task": "item_count",
+          "rep": 3,
+          "turns": 7,
+          "seconds": 16.3,
+          "cost_usd": 0.121,
+          "output_tokens": 1356,
+          "denials": 0,
+          "error": false,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "passed": true
+        }
+      ],
+      "summary": {
+        "overall": {
+          "before": {
+            "passed": 20,
+            "runs": 30,
+            "turns": 5.87,
+            "seconds": 17.5,
+            "cost_usd": 0.12
+          },
+          "after-rules": {
+            "passed": 27,
+            "runs": 30,
+            "turns": 6.2,
+            "seconds": 18.5,
+            "cost_usd": 0.12
+          },
+          "after-model": {
+            "passed": 30,
+            "runs": 30,
+            "turns": 6.33,
+            "seconds": 18.1,
+            "cost_usd": 0.12
+          }
+        },
+        "by_task": {
+          "timeout": {
+            "before": {
+              "passed": 2,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 21.8,
+              "cost_usd": 0.13
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 9.67,
+              "seconds": 27.63,
+              "cost_usd": 0.15
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 12.9,
+              "cost_usd": 0.1
+            }
+          },
+          "tax": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.67,
+              "seconds": 18.6,
+              "cost_usd": 0.12
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.67,
+              "seconds": 19.63,
+              "cost_usd": 0.13
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 22.73,
+              "cost_usd": 0.14
+            }
+          },
+          "model": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 4,
+              "seconds": 12.03,
+              "cost_usd": 0.1
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 4.67,
+              "seconds": 13.2,
+              "cost_usd": 0.1
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 4.67,
+              "seconds": 11.23,
+              "cost_usd": 0.1
+            }
+          },
+          "healthcheck": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8,
+              "seconds": 29.23,
+              "cost_usd": 0.16
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7.67,
+              "seconds": 26.93,
+              "cost_usd": 0.15
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8,
+              "seconds": 28.63,
+              "cost_usd": 0.16
+            }
+          },
+          "logging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 4.67,
+              "seconds": 12.5,
+              "cost_usd": 0.1
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 4.33,
+              "seconds": 13.87,
+              "cost_usd": 0.1
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 13.63,
+              "cost_usd": 0.11
+            }
+          },
+          "fixture": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 8,
+              "seconds": 22.5,
+              "cost_usd": 0.14
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.33,
+              "seconds": 17.7,
+              "cost_usd": 0.13
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 18.67,
+              "cost_usd": 0.13
+            }
+          },
+          "staging": {
+            "before": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 14.2,
+              "cost_usd": 0.1
+            },
+            "after-rules": {
+              "passed": 0,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 17.73,
+              "cost_usd": 0.12
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 21.1,
+              "cost_usd": 0.13
+            }
+          },
+          "coverage": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 3.67,
+              "seconds": 13.03,
+              "cost_usd": 0.1
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 4,
+              "seconds": 13.33,
+              "cost_usd": 0.1
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5,
+              "seconds": 14.43,
+              "cost_usd": 0.11
+            }
+          },
+          "discount": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.33,
+              "seconds": 15.83,
+              "cost_usd": 0.11
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 6.33,
+              "seconds": 17.53,
+              "cost_usd": 0.12
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 21.17,
+              "cost_usd": 0.14
+            }
+          },
+          "item_count": {
+            "before": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 5.67,
+              "seconds": 15.23,
+              "cost_usd": 0.11
+            },
+            "after-rules": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 17.4,
+              "cost_usd": 0.13
+            },
+            "after-model": {
+              "passed": 3,
+              "runs": 3,
+              "turns": 7,
+              "seconds": 16.53,
+              "cost_usd": 0.12
+            }
+          }
+        }
+      },
+      "cost_usd": 10.97
     }
   }
 }
